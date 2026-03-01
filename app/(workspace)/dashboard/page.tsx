@@ -1,6 +1,6 @@
 import { Bell, CalendarRange, Clock3, Layers } from "lucide-react";
-import Link from "next/link";
 
+import { AuthSignOutButton } from "@/components/shared/auth-sign-out-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,9 +109,7 @@ export default function DashboardPage() {
               <Badge variant="outline">In progress</Badge>
             </div>
 
-            <Button className="mt-2 w-full" asChild>
-              <Link href="/login">Sign out</Link>
-            </Button>
+            <AuthSignOutButton className="mt-2 w-full" />
           </CardContent>
         </Card>
       </div>

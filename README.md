@@ -16,6 +16,19 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Auth Environment
+
+Set these values in your frontend runtime environment:
+
+```bash
+# Backend API base used by server components/proxy
+BDMS_API_URL=http://127.0.0.1:8000/api/v1
+
+# Supabase auth endpoint + key (used for sign-in/refresh)
+SUPABASE_PROJECT_URL=...
+SUPABASE_PUBLISHABLE_KEY=...
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

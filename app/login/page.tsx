@@ -1,6 +1,9 @@
-import Link from "next/link";
 import { ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
+import { cookies } from "next/headers";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { loginAction } from "@/app/_actions/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +15,27 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/constants";
+import { fetchAuthenticatedUser } from "@/lib/auth/server";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{ error?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+
+  if (accessToken) {
+    const user = await fetchAuthenticatedUser(accessToken);
+    if (user) {
+      redirect("/dashboard");
+    }
+  }
+
+  const params = searchParams ? await searchParams : undefined;
+  const errorMessage = params?.error;
+
   return (
     <main className="relative grid min-h-screen overflow-hidden bg-transparent lg:grid-cols-[1.15fr_1fr]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,#d8e4d0_0,transparent_35%),radial-gradient(circle_at_88%_5%,#d3ddf0_0,transparent_28%)]" />
@@ -37,7 +59,7 @@ export default function LoginPage() {
             <p className="text-sm text-zinc-700">
               "The new dashboard cut our daily reporting time by 40%."
             </p>
-            <p className="mt-2 text-xs tracking-wide text-zinc-500 uppercase">
+            <p className="mt-2 text-xs uppercase tracking-wide text-zinc-500">
               Ops Lead, BDMS Client Team
             </p>
           </div>
@@ -59,7 +81,7 @@ export default function LoginPage() {
           <CardHeader className="space-y-4">
             <div className="flex items-center gap-2 text-zinc-500">
               <ShieldCheck className="size-4" />
-              <span className="text-xs tracking-wide uppercase">
+              <span className="text-xs uppercase tracking-wide">
                 Trusted Login
               </span>
             </div>
@@ -70,15 +92,23 @@ export default function LoginPage() {
           </CardHeader>
 
           <CardContent>
-            <form className="space-y-5">
+            <form className="space-y-5" action={loginAction}>
+              {errorMessage ? (
+                <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {errorMessage}
+                </p>
+              ) : null}
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="you@company.com"
                   autoComplete="email"
                   className="bg-white"
+                  required
                 />
               </div>
 
@@ -94,25 +124,28 @@ export default function LoginPage() {
                 </div>
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   className="bg-white"
+                  required
                 />
               </div>
 
-              <Button className="h-10 w-full gap-2 rounded-lg" asChild>
-                <Link href="/dashboard">
-                  <LockKeyhole className="size-4" />
-                  Sign in
-                  <ArrowRight className="size-4" />
-                </Link>
+              <Button className="h-10 w-full gap-2 rounded-lg" type="submit">
+                <LockKeyhole className="size-4" />
+                Sign in
+                <ArrowRight className="size-4" />
               </Button>
             </form>
 
             <p className="mt-5 text-center text-sm text-zinc-600">
               Need access?{" "}
-              <Link href="#" className="font-medium text-zinc-900 hover:underline">
+              <Link
+                href="#"
+                className="font-medium text-zinc-900 hover:underline"
+              >
                 Contact your admin
               </Link>
             </p>
