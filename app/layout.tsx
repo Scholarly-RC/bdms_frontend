@@ -1,4 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+
+import { QueryParamToasts } from "@/components/shared/query-param-toasts";
+import { Toaster } from "@/components/ui/sonner";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +18,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <Suspense fallback={null}>
+          <QueryParamToasts />
+        </Suspense>
+        {children}
+        <Toaster closeButton richColors />
+      </body>
     </html>
   );
 }

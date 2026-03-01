@@ -17,7 +17,7 @@ export default async function WorkspaceLayout({
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-8">
       <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[260px_1fr]">
-        <WorkspaceSidebar />
+        <WorkspaceSidebar appRole={user.app_role} />
         <section className="space-y-4">{children}</section>
       </div>
     </main>

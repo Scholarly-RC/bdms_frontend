@@ -10,18 +10,22 @@ import {
   SESSION_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/auth/constants";
 import { signInWithPassword } from "@/lib/auth/server";
+import { loginFormSchema } from "@/lib/validation/form-actions";
 
 const isSecureCookie = process.env.NODE_ENV === "production";
 
 export async function loginAction(formData: FormData): Promise<void> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const parsed = loginFormSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
 
-  if (!email || !password) {
+  if (!parsed.success) {
     redirect("/login?error=Please%20enter%20email%20and%20password");
   }
 
   try {
+    const { email, password } = parsed.data;
     const session = await signInWithPassword({ email, password });
     const cookieStore = await cookies();
 
@@ -56,5 +60,5 @@ export async function logoutAction(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(ACCESS_TOKEN_COOKIE);
   cookieStore.delete(REFRESH_TOKEN_COOKIE);
-  redirect("/login");
+  redirect("/login?success=Signed%20out%20successfully.");
 }

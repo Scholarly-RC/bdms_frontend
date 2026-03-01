@@ -1,9 +1,8 @@
-import { Bell, CalendarRange, Clock3, Layers } from "lucide-react";
+import { CalendarRange, Clock3, Layers } from "lucide-react";
 
-import { AuthSignOutButton } from "@/components/shared/auth-sign-out-button";
+import { DashboardAlertsButton } from "@/components/shared/dashboard-alerts-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -37,10 +36,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Bell className="size-4" />
-              Alerts
-            </Button>
+            <DashboardAlertsButton />
             <Avatar>
               <AvatarFallback>SA</AvatarFallback>
             </Avatar>
@@ -108,8 +104,6 @@ export default function DashboardPage() {
               </div>
               <Badge variant="outline">In progress</Badge>
             </div>
-
-            <AuthSignOutButton className="mt-2 w-full" />
           </CardContent>
         </Card>
       </div>

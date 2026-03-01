@@ -44,22 +44,27 @@ Build and maintain a modern, responsive Next.js frontend using shadcn/ui compone
   - `pnpm dlx shadcn@latest add <component...>`
 - Keep `components.json` as the source of truth for shadcn config.
 
-## Environment Workaround (pnpm + shadcn)
+## Environment Workaround (General)
 
-If shadcn commands fail with network/cache errors such as:
+If commands fail with environment-related network/cache/permission issues such as:
 
 - `ERR_PNPM_META_FETCH_FAIL`
 - `getaddrinfo EAI_AGAIN registry.npmjs.org`
 - `EACCES ... ~/.cache/pnpm/dlx/...`
+- `Operation not permitted (os error 1)` for process/port binding
 
 use this workaround:
 
 1. Set a local cache directory:
    - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache`
-2. Run shadcn via pnpm dlx (not npm/npx):
+2. Prefer running commands with `pnpm` and the local cache prefix:
+   - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache pnpm install`
+   - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache pnpm build`
+   - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache pnpm lint`
+3. For shadcn, run via pnpm dlx (not npm/npx):
    - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache pnpm dlx shadcn@latest init -d`
    - `XDG_CACHE_HOME=/home/sharles/Projects/BDMS/.pnpm-cache pnpm dlx shadcn@latest add button card input label avatar badge progress separator`
-3. If sandbox restrictions block networking or process binding, run the same commands with elevated permissions in the execution environment.
+4. If sandbox restrictions block networking or process binding, rerun the same command with elevated permissions in the execution environment.
 
 ## Build Notes
 

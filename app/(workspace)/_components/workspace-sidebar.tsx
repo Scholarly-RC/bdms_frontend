@@ -5,11 +5,13 @@ import {
   FileCheck2,
   FileText,
   ListChecks,
+  MapPinned,
   PanelLeftClose,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { AuthSignOutButton } from "@/components/shared/auth-sign-out-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,19 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: FileCheck2 },
 ];
 
-export function WorkspaceSidebar() {
+const adminItems = [
+  {
+    href: "/barangay-profile",
+    label: "Barangay Profile",
+    icon: MapPinned,
+  },
+];
+
+type WorkspaceSidebarProps = {
+  appRole: "admin" | "user";
+};
+
+export function WorkspaceSidebar({ appRole }: WorkspaceSidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -64,6 +78,34 @@ export function WorkspaceSidebar() {
             </Link>
           );
         })}
+
+        {appRole === "admin" ? (
+          <>
+            <p className="px-3 pt-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Admin
+            </p>
+            {adminItems.map((item) => {
+              const isActive = pathname === item.href;
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2 transition-colors",
+                    isActive
+                      ? "bg-zinc-900 text-zinc-50"
+                      : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900",
+                  )}
+                >
+                  <span>{item.label}</span>
+                  <Icon className="size-4" />
+                </Link>
+              );
+            })}
+          </>
+        ) : null}
       </nav>
 
       <Card className="mt-6 border-zinc-300/70 bg-zinc-50/80 py-4">
@@ -77,6 +119,8 @@ export function WorkspaceSidebar() {
           </div>
         </CardContent>
       </Card>
+
+      <AuthSignOutButton className="mt-4 w-full" />
     </aside>
   );
 }
