@@ -80,9 +80,18 @@ export async function PATCH(request: Request, context: Params): Promise<Response
   const { formId } = await context.params;
   const normalizedFormId = formId.trim();
   const requestBody = (await request.json().catch(() => null)) as
-    | { candidateIndex?: number; value?: string }
+    | {
+        candidateIndex?: number;
+        label?: string;
+        name?: string;
+        rule?: string;
+        value?: string;
+      }
     | null;
   const candidateIndex = requestBody?.candidateIndex;
+  const label = requestBody?.label;
+  const name = requestBody?.name;
+  const rule = requestBody?.rule;
   const value = requestBody?.value;
 
   if (!normalizedFormId) {
@@ -100,6 +109,18 @@ export async function PATCH(request: Request, context: Params): Promise<Response
     );
   }
 
+  if (typeof label !== "string") {
+    return Response.json({ detail: "Invalid extracted field label." }, { status: 400 });
+  }
+
+  if (typeof name !== "string") {
+    return Response.json({ detail: "Invalid extracted field name." }, { status: 400 });
+  }
+
+  if (typeof rule !== "string") {
+    return Response.json({ detail: "Invalid extracted field rule." }, { status: 400 });
+  }
+
   if (typeof value !== "string") {
     return Response.json({ detail: "Invalid extracted field value." }, { status: 400 });
   }
@@ -107,7 +128,7 @@ export async function PATCH(request: Request, context: Params): Promise<Response
   const forwarded = await fetchWithSessionRefresh(
     `/forms/${encodeURIComponent(normalizedFormId)}/extracted-fields/${candidateIndex}`,
     {
-      body: JSON.stringify({ value }),
+      body: JSON.stringify({ label, name, rule, value }),
       headers: {
         "Content-Type": "application/json",
       },

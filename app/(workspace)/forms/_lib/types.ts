@@ -6,6 +6,7 @@ export type PdfFieldCandidate = {
   line_text: string;
   match_text: string;
   value: string;
+  rule?: string;
   bbox: [number, number, number, number];
   anchor_before: string;
   anchor_after: string;

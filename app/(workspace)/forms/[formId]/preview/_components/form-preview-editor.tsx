@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import {
+  AlertCircle,
   CheckCircle2,
-  Pencil,
   LoaderCircle,
+  Pencil,
+  Plus,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   FormRead,
@@ -55,9 +57,21 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
   );
   const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
   const [pendingValueEditIndex, setPendingValueEditIndex] = useState<number | null>(null);
+  const [pendingLabel, setPendingLabel] = useState("");
+  const [pendingRule, setPendingRule] = useState("");
   const [pendingValue, setPendingValue] = useState("");
+  const [isSubmittingFieldEdit, setIsSubmittingFieldEdit] = useState(false);
+  const [createCandidateRequest, setCreateCandidateRequest] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detectedFieldsListRef = useRef<HTMLDivElement | null>(null);
+  const sortedCandidates = useMemo(
+    () =>
+      candidates
+        .map((candidate, index) => ({ candidate, index }))
+        .sort((left, right) => compareCandidatesByPdfPosition(left.candidate, right.candidate)),
+    [candidates],
+  );
 
   const savePayload = useCallback(
     async (nextCandidates: PdfFieldCandidate[]) => {
@@ -103,6 +117,18 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
       );
     },
     [],
+  );
+
+  const handleCandidateCreate = useCallback(
+    (nextCandidate: PdfFieldCandidate) => {
+      const nextCandidates = [...candidates, nextCandidate];
+      setCandidates(nextCandidates);
+      setActiveCandidateIndex(nextCandidates.length - 1);
+      void savePayload(nextCandidates).catch(() => {
+        setSaveState("error");
+      });
+    },
+    [candidates, savePayload],
   );
 
   const handleCandidateSelect = useCallback((candidateIndex: number | null) => {
@@ -166,36 +192,62 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
     }
 
     setSaveState("saving");
-    const response = await fetch(
-      `/api/forms/${encodeURIComponent(form.id)}/extracted-fields`,
-      {
-        body: JSON.stringify({
-          candidateIndex: pendingValueEditIndex,
-          value: pendingValue,
-        }),
-        headers: {
-          "Content-Type": "application/json",
+    setIsSubmittingFieldEdit(true);
+    try {
+      const response = await fetch(
+        `/api/forms/${encodeURIComponent(form.id)}/extracted-fields`,
+        {
+          body: JSON.stringify({
+            candidateIndex: pendingValueEditIndex,
+            label: pendingLabel,
+            name: normalizeFieldName(pendingLabel),
+            rule: pendingRule,
+            value: pendingValue,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "PATCH",
         },
-        method: "PATCH",
-      },
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to update extracted field value.");
+      }
+
+      const payload = (await response.json()) as PdfFieldParseResult;
+      setCandidates(payload.candidates);
+      setSaveState("saved");
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        setSaveState("idle");
+      }, 1200);
+      setPendingValueEditIndex(null);
+      setPendingLabel("");
+      setPendingRule("");
+      setPendingValue("");
+    } finally {
+      setIsSubmittingFieldEdit(false);
+    }
+  }, [form.id, pendingLabel, pendingRule, pendingValue, pendingValueEditIndex]);
+
+  useEffect(() => {
+    if (activeCandidateIndex === null) {
+      return;
+    }
+
+    const listElement = detectedFieldsListRef.current;
+    const activeCard = listElement?.querySelector<HTMLElement>(
+      `[data-detected-field-index="${activeCandidateIndex}"]`,
     );
 
-    if (!response.ok) {
-      throw new Error("Unable to update extracted field value.");
-    }
-
-    const payload = (await response.json()) as PdfFieldParseResult;
-    setCandidates(payload.candidates);
-    setSaveState("saved");
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      setSaveState("idle");
-    }, 1200);
-    setPendingValueEditIndex(null);
-    setPendingValue("");
-  }, [form.id, pendingValue, pendingValueEditIndex]);
+    activeCard?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [activeCandidateIndex]);
 
   return (
     <div className="space-y-4">
@@ -222,6 +274,7 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
           <CardContent>
             <PdfPreviewViewer
               activeCandidateIndex={activeCandidateIndex}
+              createCandidateRequest={createCandidateRequest}
               candidates={candidates}
               fileUrl={`/api/forms/${encodeURIComponent(form.id)}/file`}
               onCandidateChange={handleCandidateChange}
@@ -231,6 +284,7 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                   setSaveState("error");
                 });
               }}
+              onCandidateCreate={handleCandidateCreate}
               onCandidateSelect={handleCandidateSelect}
             />
           </CardContent>
@@ -238,16 +292,29 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
 
         <div className="space-y-4 xl:w-[320px] xl:shrink-0">
           <Card className="border-zinc-300/70 bg-white/85 backdrop-blur-sm">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle>Detected Fields</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setCreateCandidateRequest((current) => current + 1);
+                }}
+              >
+                <Plus className="size-4" />
+                Add field
+              </Button>
             </CardHeader>
-            <CardContent className="max-h-[32rem] space-y-2 overflow-y-auto pr-2 [overflow-anchor:none]">
+            <CardContent
+              ref={detectedFieldsListRef}
+              className="max-h-[32rem] space-y-2 overflow-y-auto pr-2 [overflow-anchor:none]"
+            >
               {candidates.length === 0 ? (
                 <p className="text-sm text-zinc-600">
                   No saved extraction data is available yet.
                 </p>
               ) : (
-                candidates.map((candidate, index) => {
+                sortedCandidates.map(({ candidate, index }) => {
                   const isActive = index === activeCandidateIndex;
                   return (
                     <div
@@ -261,7 +328,16 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                       onClick={() => {
                         handleCandidateSelect(index);
                       }}
-                      >
+                    >
+                      {normalizeCandidateText(candidate.rule) ? (
+                        <span
+                          className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
+                          title="This field has a custom rule."
+                        >
+                          <AlertCircle className="size-3.5" />
+                          <span className="sr-only">This field has a custom rule.</span>
+                        </span>
+                      ) : null}
                         <div className="min-w-0 flex-1 space-y-3">
                         <div className="flex w-full items-start justify-between gap-3 pr-10 text-left">
                           <div className="min-w-0">
@@ -288,34 +364,27 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                       </div>
                       {isActive ? (
                         <div
-                          className="absolute top-3 right-3"
+                          className="absolute right-3 bottom-3 flex items-center gap-1"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
                         >
                           <Button
                             type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            className="rounded-full"
-                            title="Modify value"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 rounded-full border-0 p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-cyan-600"
+                            title="Modify field"
                             onClick={() => {
                               setPendingValueEditIndex(index);
+                              setPendingLabel(getCandidateEditableLabel(candidate));
+                              setPendingRule(candidate.rule ?? "");
                               setPendingValue(candidate.value ?? "");
                             }}
                           >
                             <Pencil className="size-4" />
-                            <span className="sr-only">Modify value</span>
+                            <span className="sr-only">Modify field</span>
                           </Button>
-                        </div>
-                      ) : null}
-                      {isActive ? (
-                        <div
-                          className="absolute right-3 bottom-3"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
                           <Button
                             type="button"
                             variant="ghost"
@@ -342,19 +411,57 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
       <Dialog
         open={pendingValueEditIndex !== null}
         onOpenChange={(open) => {
-          if (!open) {
+          if (!open && !isSubmittingFieldEdit) {
             setPendingValueEditIndex(null);
+            setPendingLabel("");
+            setPendingRule("");
             setPendingValue("");
           }
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Modify field value</DialogTitle>
+            <DialogTitle>Modify field</DialogTitle>
             <DialogDescription>
-              Update the detected field value for this form preview.
+              Update the detected field label, value, and rule for this form preview.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2">
+            <label
+              htmlFor="candidate-label-modal"
+              className="block text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase"
+            >
+              Label
+            </label>
+            <Input
+              id="candidate-label-modal"
+              value={pendingLabel}
+              placeholder="Enter field label"
+              className="bg-white"
+              disabled={isSubmittingFieldEdit}
+              onChange={(event) => {
+                setPendingLabel(event.target.value);
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="candidate-rule-modal"
+              className="block text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase"
+            >
+              Rule
+            </label>
+            <Input
+              id="candidate-rule-modal"
+              value={pendingRule}
+              placeholder="e.g. Keep only the last 2 digits of the year"
+              className="bg-white"
+              disabled={isSubmittingFieldEdit}
+              onChange={(event) => {
+                setPendingRule(event.target.value);
+              }}
+            />
+          </div>
           <div className="space-y-2">
             <label
               htmlFor="candidate-value-modal"
@@ -367,6 +474,7 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
               value={pendingValue}
               placeholder="Enter value"
               className="bg-white"
+              disabled={isSubmittingFieldEdit}
               onChange={(event) => {
                 setPendingValue(event.target.value);
               }}
@@ -384,8 +492,11 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
             <Button
               type="button"
               variant="outline"
+              disabled={isSubmittingFieldEdit}
               onClick={() => {
                 setPendingValueEditIndex(null);
+                setPendingLabel("");
+                setPendingRule("");
                 setPendingValue("");
               }}
             >
@@ -393,13 +504,21 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
             </Button>
             <Button
               type="button"
+              disabled={isSubmittingFieldEdit}
               onClick={() => {
                 void handleCandidateValueSave().catch(() => {
                   setSaveState("error");
                 });
               }}
             >
-              Save value
+              {isSubmittingFieldEdit ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save field"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -482,6 +601,39 @@ function getCandidateDisplayName(candidate: PdfFieldCandidate): string {
 
 function normalizeCandidateText(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getCandidateEditableLabel(candidate: PdfFieldCandidate): string {
+  return normalizeCandidateText(candidate.label) || getCandidateDisplayName(candidate);
+}
+
+function normalizeFieldName(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized || "field";
+}
+
+function compareCandidatesByPdfPosition(
+  left: PdfFieldCandidate,
+  right: PdfFieldCandidate,
+): number {
+  if (left.page !== right.page) {
+    return left.page - right.page;
+  }
+
+  if (left.bbox[1] !== right.bbox[1]) {
+    return left.bbox[1] - right.bbox[1];
+  }
+
+  if (left.bbox[0] !== right.bbox[0]) {
+    return left.bbox[0] - right.bbox[0];
+  }
+
+  return left.span_index - right.span_index;
 }
 
 function SaveBadge({ saveState }: { saveState: SaveState }) {
