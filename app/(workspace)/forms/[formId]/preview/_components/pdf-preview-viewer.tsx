@@ -1,6 +1,12 @@
 "use client";
 
-import { AlertCircle, FileText, LoaderCircle, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  AlertCircle,
+  FileText,
+  LoaderCircle,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PdfFieldCandidate } from "@/app/(workspace)/forms/_lib/types";
@@ -11,6 +17,7 @@ type PdfPreviewViewerProps = {
   candidates: PdfFieldCandidate[];
   createCandidateRequest: number;
   fileUrl: string;
+  showBboxes?: boolean;
   onCandidateChange: (
     candidateIndex: number,
     nextBbox: PdfFieldCandidate["bbox"],
@@ -53,6 +60,7 @@ export function PdfPreviewViewer({
   candidates,
   createCandidateRequest,
   fileUrl,
+  showBboxes = true,
   onCandidateChange,
   onCandidateCommit,
   onCandidateCreate,
@@ -83,7 +91,11 @@ export function PdfPreviewViewer({
         const pdfDocument = await loadingTask.promise;
         const renderedPages: RenderedPage[] = [];
 
-        for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+        for (
+          let pageNumber = 1;
+          pageNumber <= pdfDocument.numPages;
+          pageNumber += 1
+        ) {
           const page = await pdfDocument.getPage(pageNumber);
           const pdfViewport = page.getViewport({ scale: 1 });
           const viewport = page.getViewport({ scale: 1.35 });
@@ -97,7 +109,8 @@ export function PdfPreviewViewer({
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
 
-          await page.render({ canvas, canvasContext: context, viewport }).promise;
+          await page.render({ canvas, canvasContext: context, viewport })
+            .promise;
 
           renderedPages.push({
             dataUrl: canvas.toDataURL("image/png"),
@@ -143,8 +156,10 @@ export function PdfPreviewViewer({
 
       event.preventDefault();
 
-      const scaleX = interaction.page.pdfWidth / interaction.containerRect.width;
-      const scaleY = interaction.page.pdfHeight / interaction.containerRect.height;
+      const scaleX =
+        interaction.page.pdfWidth / interaction.containerRect.width;
+      const scaleY =
+        interaction.page.pdfHeight / interaction.containerRect.height;
       const deltaX = (event.clientX - interaction.startX) * scaleX;
       const deltaY = (event.clientY - interaction.startY) * scaleY;
       const [x1, y1, x2, y2] = interaction.startBbox;
@@ -153,17 +168,28 @@ export function PdfPreviewViewer({
 
       let nextBbox: PdfFieldCandidate["bbox"];
       if (interaction.mode === "move") {
-        const nextX1 = clamp(x1 + deltaX, 0, interaction.page.pdfWidth - bboxWidth);
-        const nextY1 = clamp(y1 + deltaY, 0, interaction.page.pdfHeight - bboxHeight);
-        nextBbox = [
-          nextX1,
-          nextY1,
-          nextX1 + bboxWidth,
-          nextY1 + bboxHeight,
-        ];
+        const nextX1 = clamp(
+          x1 + deltaX,
+          0,
+          interaction.page.pdfWidth - bboxWidth,
+        );
+        const nextY1 = clamp(
+          y1 + deltaY,
+          0,
+          interaction.page.pdfHeight - bboxHeight,
+        );
+        nextBbox = [nextX1, nextY1, nextX1 + bboxWidth, nextY1 + bboxHeight];
       } else {
-        const nextX2 = clamp(x2 + deltaX, x1 + MIN_BOX_SIZE, interaction.page.pdfWidth);
-        const nextY2 = clamp(y2 + deltaY, y1 + MIN_BOX_SIZE, interaction.page.pdfHeight);
+        const nextX2 = clamp(
+          x2 + deltaX,
+          x1 + MIN_BOX_SIZE,
+          interaction.page.pdfWidth,
+        );
+        const nextY2 = clamp(
+          y2 + deltaY,
+          y1 + MIN_BOX_SIZE,
+          interaction.page.pdfHeight,
+        );
         nextBbox = [x1, y1, nextX2, nextY2];
       }
 
@@ -315,90 +341,86 @@ export function PdfPreviewViewer({
             {pageCandidates.map(({ candidates: pageItems, page }) => (
               <div key={page.pageNumber}>
                 <div className="p-2 sm:p-4">
-                <div
-                  className="relative mx-auto overflow-hidden rounded-[1.1rem] border border-zinc-300/70 bg-white shadow-sm"
-                  style={{
-                    aspectRatio: `${page.width} / ${page.height}`,
-                    width: `${zoom * 100}%`,
-                  }}
-                >
-                  <img
-                    src={page.dataUrl}
-                    alt={`PDF page ${page.pageNumber}`}
-                    className="block h-auto w-full max-w-none"
-                    height={page.height}
-                    width={page.width}
-                  />
-                  {pageItems.map(({ candidate, index }) => {
-                    const [x1, y1, x2, y2] = candidate.bbox;
-                    const left = (x1 / page.pdfWidth) * 100;
-                    const top = (y1 / page.pdfHeight) * 100;
-                    const width = ((x2 - x1) / page.pdfWidth) * 100;
-                    const height = ((y2 - y1) / page.pdfHeight) * 100;
-                    const isActive = activeCandidateIndex === index;
-                    const overlayFontSize = clamp(
-                      BASE_OVERLAY_FONT_SIZE * zoom,
-                      8,
-                      20,
-                    );
+                  <div
+                    className="relative mx-auto overflow-hidden rounded-[1.1rem] border border-zinc-300/70 bg-white shadow-sm"
+                    style={{
+                      aspectRatio: `${page.width} / ${page.height}`,
+                      width: `${zoom * 100}%`,
+                    }}
+                  >
+                    <img
+                      src={page.dataUrl}
+                      alt={`PDF page ${page.pageNumber}`}
+                      className="block h-auto w-full max-w-none"
+                      height={page.height}
+                      width={page.width}
+                    />
+                    {pageItems.map(({ candidate, index }) => {
+                      const [x1, y1, x2, y2] = candidate.bbox;
+                      const left = (x1 / page.pdfWidth) * 100;
+                      const top = (y1 / page.pdfHeight) * 100;
+                      const width = ((x2 - x1) / page.pdfWidth) * 100;
+                      const height = ((y2 - y1) / page.pdfHeight) * 100;
+                      const isActive = activeCandidateIndex === index;
+                      const overlayFontSize = clamp(
+                        BASE_OVERLAY_FONT_SIZE * zoom,
+                        8,
+                        20,
+                      );
 
-                    return (
-                      <button
-                        key={`${candidate.page}-${candidate.span_index}-${index}`}
-                        type="button"
-                        data-candidate-index={index}
-                        className={`absolute overflow-hidden rounded-sm border text-left transition ${
-                          isActive
-                            ? "border-cyan-500/95 bg-cyan-400/16 shadow-[0_0_0_2px_rgba(6,182,212,0.24)]"
-                            : "border-emerald-600/70 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(5,150,105,0.16)]"
-                        }`}
-                        style={{
-                          height: `${height}%`,
-                          left: `${left}%`,
-                          top: `${top}%`,
-                          width: `${width}%`,
-                        }}
-                        title={`${candidate.kind}: ${candidate.match_text}`}
-                        onPointerDown={(event) => {
-                          if (event.button !== 0) {
-                            return;
-                          }
-                          onCandidateSelect(index);
-                          interactionRef.current = {
-                            candidateIndex: index,
-                            containerRect: event.currentTarget.parentElement!.getBoundingClientRect(),
-                            hasChanged: false,
-                            mode: "move",
-                            page,
-                            startBbox: candidate.bbox,
-                            startX: event.clientX,
-                            startY: event.clientY,
-                          };
-                          event.preventDefault();
-                        }}
-                      >
-                        <span
-                          className="pointer-events-none absolute inset-0 overflow-hidden px-1 py-0.5 leading-tight text-zinc-800/90"
+                      if (!showBboxes) {
+                        return (
+                          <div
+                            key={`${candidate.page}-${candidate.span_index}-${index}`}
+                            className="pointer-events-none absolute overflow-hidden text-left"
+                            style={{
+                              height: `${height}%`,
+                              left: `${left}%`,
+                              top: `${top}%`,
+                              width: `${width}%`,
+                            }}
+                            title={`${candidate.kind}: ${candidate.match_text}`}
+                          >
+                            <span
+                              className="absolute inset-0 overflow-hidden px-1 py-0.5 leading-tight text-zinc-800/90"
+                              style={{
+                                fontSize: `${overlayFontSize}px`,
+                              }}
+                            >
+                              {candidate.value?.trim() ? candidate.value : ""}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={`${candidate.page}-${candidate.span_index}-${index}`}
+                          type="button"
+                          data-candidate-index={index}
+                          className={`absolute overflow-hidden rounded-sm border text-left transition ${
+                            isActive
+                              ? "border-cyan-500/95 bg-cyan-400/16 shadow-[0_0_0_2px_rgba(6,182,212,0.24)]"
+                              : "border-emerald-600/70 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(5,150,105,0.16)]"
+                          }`}
                           style={{
-                            fontSize: `${overlayFontSize}px`,
+                            height: `${height}%`,
+                            left: `${left}%`,
+                            top: `${top}%`,
+                            width: `${width}%`,
                           }}
-                        >
-                          {candidate.value?.trim() ? candidate.value : ""}
-                        </span>
-                        <span
-                          className="absolute right-0 bottom-0 h-2.5 w-2.5 cursor-se-resize rounded-tl-sm bg-white/65"
+                          title={`${candidate.kind}: ${candidate.match_text}`}
                           onPointerDown={(event) => {
                             if (event.button !== 0) {
                               return;
                             }
-                            event.stopPropagation();
                             onCandidateSelect(index);
                             interactionRef.current = {
                               candidateIndex: index,
                               containerRect:
-                                event.currentTarget.parentElement!.parentElement!.getBoundingClientRect(),
+                                event.currentTarget.parentElement!.getBoundingClientRect(),
                               hasChanged: false,
-                              mode: "resize",
+                              mode: "move",
                               page,
                               startBbox: candidate.bbox,
                               startX: event.clientX,
@@ -407,13 +429,43 @@ export function PdfPreviewViewer({
                             event.preventDefault();
                           }}
                         >
-                          <span className="absolute right-0 bottom-0 h-1.5 w-1.5 rounded-tl border-l border-t border-cyan-600/80" />
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <span
+                            className="pointer-events-none absolute inset-0 overflow-hidden px-1 py-0.5 leading-tight text-zinc-800/90"
+                            style={{
+                              fontSize: `${overlayFontSize}px`,
+                            }}
+                          >
+                            {candidate.value?.trim() ? candidate.value : ""}
+                          </span>
+                          <span
+                            className="absolute right-0 bottom-0 h-2.5 w-2.5 cursor-se-resize rounded-tl-sm bg-white/65"
+                            onPointerDown={(event) => {
+                              if (event.button !== 0) {
+                                return;
+                              }
+                              event.stopPropagation();
+                              onCandidateSelect(index);
+                              interactionRef.current = {
+                                candidateIndex: index,
+                                containerRect:
+                                  event.currentTarget.parentElement!.parentElement!.getBoundingClientRect(),
+                                hasChanged: false,
+                                mode: "resize",
+                                page,
+                                startBbox: candidate.bbox,
+                                startX: event.clientX,
+                                startY: event.clientY,
+                              };
+                              event.preventDefault();
+                            }}
+                          >
+                            <span className="absolute right-0 bottom-0 h-1.5 w-1.5 rounded-tl border-l border-t border-cyan-600/80" />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
               </div>
             ))}
           </div>
@@ -439,15 +491,28 @@ function createCandidateAtViewerCenter({
   const targetPage = getCenteredPage(pages, viewerElement);
   const centerX = targetPage.pdfWidth / 2;
   const centerY = targetPage.pdfHeight / 2;
-  const boxWidth = clamp(targetPage.pdfWidth * 0.26, 120, targetPage.pdfWidth * 0.45);
-  const boxHeight = clamp(targetPage.pdfHeight * 0.035, 24, targetPage.pdfHeight * 0.08);
+  const boxWidth = clamp(
+    targetPage.pdfWidth * 0.26,
+    120,
+    targetPage.pdfWidth * 0.45,
+  );
+  const boxHeight = clamp(
+    targetPage.pdfHeight * 0.035,
+    24,
+    targetPage.pdfHeight * 0.08,
+  );
   const nextSpanIndex =
     candidates.reduce(
-      (highestSpanIndex, candidate) => Math.max(highestSpanIndex, candidate.span_index),
+      (highestSpanIndex, candidate) =>
+        Math.max(highestSpanIndex, candidate.span_index),
       -1,
     ) + 1;
   const x1 = clamp(centerX - boxWidth / 2, 0, targetPage.pdfWidth - boxWidth);
-  const y1 = clamp(centerY - boxHeight / 2, 0, targetPage.pdfHeight - boxHeight);
+  const y1 = clamp(
+    centerY - boxHeight / 2,
+    0,
+    targetPage.pdfHeight - boxHeight,
+  );
 
   return {
     anchor_after: "",
@@ -500,7 +565,9 @@ function getCenteredPage(
 }
 
 function roundBbox(bbox: PdfFieldCandidate["bbox"]): PdfFieldCandidate["bbox"] {
-  return bbox.map((value) => Number(value.toFixed(2))) as PdfFieldCandidate["bbox"];
+  return bbox.map((value) =>
+    Number(value.toFixed(2)),
+  ) as PdfFieldCandidate["bbox"];
 }
 
 function isSameBbox(

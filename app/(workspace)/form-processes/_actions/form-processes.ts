@@ -22,6 +22,7 @@ export async function createFormProcessAction(
   formData: FormData,
 ): Promise<void> {
   const parsed = createFormProcessFormSchema.safeParse({
+    title: formData.get("title"),
     formIds: formData
       .getAll("form_ids")
       .map((value) => (typeof value === "string" ? value : ""))
@@ -35,7 +36,7 @@ export async function createFormProcessAction(
     );
   }
 
-  const { formIds, context } = parsed.data;
+  const { formIds, context, title } = parsed.data;
 
   const response = await backendFetchFromSession("/processes", {
     method: "POST",
@@ -43,6 +44,7 @@ export async function createFormProcessAction(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      title,
       form_ids: formIds,
       context,
     }),
@@ -56,11 +58,14 @@ export async function createFormProcessAction(
     redirect(`/form-processes?error=${encodeURIComponent(message)}`);
   }
 
-  const createdProcesses = (await response.json().catch(() => [])) as { id: string }[];
-  const processCount = createdProcesses.length || formIds.length;
+  const createdProcesses = (await response.json().catch(() => [])) as {
+    id: string;
+  }[];
+  const processCount = createdProcesses.length || 1;
+  const formCount = formIds.length;
   const successMessage =
     processCount === 1
-      ? "1 form process created and queued for AI filling."
+      ? `1 form process created with ${formCount} selected form${formCount === 1 ? "" : "s"} and queued for AI filling.`
       : `${processCount} form processes created and queued for AI filling.`;
 
   redirect(`/form-processes?success=${encodeURIComponent(successMessage)}`);

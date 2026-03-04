@@ -29,6 +29,7 @@ export type FormProcessFormRead = {
 
 export type FormProcessRead = {
   id: string;
+  title: string;
   context: string;
   status:
     | "queued"

@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 type DeleteFormProcessButtonProps = {
   processId: string;
   processName: string;
+  iconOnly?: boolean;
 };
 
 export function DeleteFormProcessButton({
   processId,
   processName,
+  iconOnly = false,
 }: DeleteFormProcessButtonProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -32,9 +34,12 @@ export function DeleteFormProcessButton({
           variant="destructive"
           size="sm"
           disabled={isPending}
+          className={iconOnly ? "size-8 rounded-md p-0" : undefined}
+          aria-label={`Delete ${processName}`}
+          title="Delete process"
         >
           <Trash2 className="size-4" />
-          Delete
+          {iconOnly ? <span className="sr-only">Delete</span> : "Delete"}
         </Button>
       }
       title="Delete form process?"

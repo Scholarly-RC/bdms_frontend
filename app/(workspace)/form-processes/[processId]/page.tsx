@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
+import { ProcessFormSelector } from "@/app/(workspace)/form-processes/[processId]/_components/process-form-selector";
 import { FormProcessReviewEditor } from "@/app/(workspace)/form-processes/[processId]/_components/form-process-review-editor";
 import { Button } from "@/components/ui/button";
 import { backendFetchFromSession } from "@/lib/api/server";
@@ -9,6 +10,9 @@ import { backendFetchFromSession } from "@/lib/api/server";
 type PageProps = {
   params: Promise<{
     processId: string;
+  }>;
+  searchParams: Promise<{
+    formId?: string;
   }>;
 };
 
@@ -31,10 +35,15 @@ async function fetchProcess(processId: string): Promise<FormProcessRead> {
   return (await response.json()) as FormProcessRead;
 }
 
-export default async function FormProcessDetailPage({ params }: PageProps) {
+export default async function FormProcessDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { processId } = await params;
+  const { formId } = await searchParams;
   const process = await fetchProcess(processId);
-  const processForm = process.forms[0];
+  const processForm =
+    process.forms.find((form) => form.id === formId) ?? process.forms[0];
 
   if (!processForm) {
     notFound();
@@ -42,18 +51,34 @@ export default async function FormProcessDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
-            Review Form Process
+            {process.title}
           </h1>
-          <p className="text-sm text-zinc-500">
-            Review AI-filled values, adjust fields, then finalize the process.
+          <p className="text-sm font-medium text-zinc-800">
+            {processForm.name}
           </p>
+          {processForm.description ? (
+            <p className="text-sm text-zinc-600">{processForm.description}</p>
+          ) : null}
         </div>
-        <Button asChild variant="outline" className="rounded-lg">
-          <Link href="/form-processes">Back to processes</Link>
-        </Button>
+        <div className="flex flex-wrap items-end justify-end gap-2">
+          {process.forms.length > 1 ? (
+            <div className="space-y-1">
+              <ProcessFormSelector
+                options={process.forms.map((form) => ({
+                  id: form.id,
+                  name: form.name,
+                }))}
+                selectedFormId={processForm.id}
+              />
+            </div>
+          ) : null}
+          <Button asChild variant="outline" className="rounded-lg">
+            <Link href="/form-processes">Back to processes</Link>
+          </Button>
+        </div>
       </header>
 
       <FormProcessReviewEditor process={process} processForm={processForm} />

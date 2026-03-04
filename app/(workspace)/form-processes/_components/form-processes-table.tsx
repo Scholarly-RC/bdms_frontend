@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Eye } from "lucide-react";
 
 import { DeleteFormProcessButton } from "@/app/(workspace)/form-processes/_components/delete-form-process-button";
 import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
@@ -17,22 +18,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type FormRead = {
-  id: string;
-  name: string;
-};
-
 type FormProcessesTableProps = {
-  forms: FormRead[];
   processes: FormProcessRead[];
 };
 
-const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>(["queued", "filling"]);
+const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>([
+  "queued",
+  "filling",
+]);
 
-export function FormProcessesTable({
-  forms,
-  processes,
-}: FormProcessesTableProps) {
+export function FormProcessesTable({ processes }: FormProcessesTableProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -49,71 +44,130 @@ export function FormProcessesTable({
     };
   }, [processes, router]);
 
-  const formNames = new Map(forms.map((form) => [form.id, form.name]));
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-zinc-200/80">
+            <TableHead className="h-12 w-[40%] pl-6 text-xs font-semibold tracking-[0.14em] uppercase text-zinc-500">
+              Process
+            </TableHead>
+            <TableHead className="h-12 w-[28%] text-xs font-semibold tracking-[0.14em] uppercase text-zinc-500">
+              Status
+            </TableHead>
+            <TableHead className="h-12 w-[20%] text-xs font-semibold tracking-[0.14em] uppercase text-zinc-500">
+              Updated
+            </TableHead>
+            <TableHead className="h-12 w-[12%] pr-6 text-right text-xs font-semibold tracking-[0.14em] uppercase text-zinc-500">
+              Actions
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {processes.map((process) => (
+            <TableRow
+              key={process.id}
+              className="border-zinc-200/70 align-middle transition-colors hover:bg-zinc-50/70"
+            >
+              <TableCell className="pl-6 py-4 align-middle">
+                <div className="space-y-0.5">
+                  <p className="font-medium text-zinc-900">{process.title}</p>
+                  <p className="text-sm text-zinc-500">
+                    {formatShortProcessId(process.id)} · {process.forms.length} child form
+                    {process.forms.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="py-4 align-middle">
+                <div className="space-y-2">
+                  <StatusBadge status={process.status} />
+                  {process.current_job ? (
+                    <p className="text-xs text-zinc-500">
+                      Job {formatJobStatus(process.current_job.status)} ·{" "}
+                      {process.current_job.progress}%
+                    </p>
+                  ) : null}
+                  {process.failure_reason ? (
+                    <p className="max-w-xs text-xs text-red-600">
+                      {process.failure_reason}
+                    </p>
+                  ) : null}
+                </div>
+              </TableCell>
+              <TableCell className="py-4 align-middle text-sm text-zinc-500">
+                <div className="space-y-1 leading-tight">
+                  <p className="font-medium text-zinc-700">
+                    {formatProcessDate(process.updated_at)}
+                  </p>
+                  <p className="text-xs text-zinc-400">
+                    Created {formatShortDate(process.created_at)}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="pr-6 py-4 align-middle">
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="size-8 rounded-md p-0"
+                  >
+                    <Link
+                      href={`/form-processes/${encodeURIComponent(process.id)}`}
+                      aria-label={
+                        process.status === "finalized"
+                          ? "View process"
+                          : "Review process"
+                      }
+                      title={
+                        process.status === "finalized"
+                          ? "View process"
+                          : "Review process"
+                      }
+                    >
+                      <Eye className="size-4" />
+                      <span className="sr-only">
+                        {process.status === "finalized" ? "View" : "Review"}
+                      </span>
+                    </Link>
+                  </Button>
+                  <DeleteFormProcessButton
+                    processId={process.id}
+                    processName={formatProcessName(process)}
+                    iconOnly
+                  />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
+  const label =
+    status === "ready_for_review"
+      ? "Ready for review"
+      : status.replaceAll("_", " ");
+
+  const styles =
+    status === "finalized"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : status === "ready_for_review"
+        ? "border-sky-200 bg-sky-50 text-sky-700"
+        : status === "failed"
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-amber-200 bg-amber-50 text-amber-700";
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="pl-6">Forms</TableHead>
-          <TableHead>Context</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead className="pr-6 text-right">Action</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {processes.map((process) => (
-          <TableRow key={process.id}>
-            <TableCell className="pl-6">
-              <div className="space-y-1">
-                {process.forms.map((form) => (
-                  <p key={form.id} className="font-medium text-zinc-900">
-                    {form.name || formNames.get(form.source_form_id) || "Unknown form"}
-                  </p>
-                ))}
-              </div>
-            </TableCell>
-            <TableCell className="max-w-md text-sm text-zinc-600">
-              <p className="line-clamp-3">{process.context}</p>
-            </TableCell>
-            <TableCell>
-              <Badge variant="secondary" className="rounded-full bg-zinc-100 text-zinc-700">
-                {process.status === "ready_for_review"
-                  ? "Ready for review"
-                  : process.status.replaceAll("_", " ")}
-              </Badge>
-              {process.current_job ? (
-                <p className="mt-1 text-xs text-zinc-500">
-                  Job {formatJobStatus(process.current_job.status)} · {process.current_job.progress}%
-                </p>
-              ) : null}
-              {process.failure_reason ? (
-                <p className="mt-1 max-w-xs text-xs text-red-600">
-                  {process.failure_reason}
-                </p>
-              ) : null}
-            </TableCell>
-            <TableCell className="text-sm text-zinc-500">
-              {formatProcessDate(process.created_at)}
-            </TableCell>
-            <TableCell className="pr-6 text-right">
-              <div className="flex justify-end gap-2">
-                <Button asChild variant="outline" size="sm" className="rounded-md">
-                  <Link href={`/form-processes/${encodeURIComponent(process.id)}`}>
-                    {process.status === "finalized" ? "View" : "Review"}
-                  </Link>
-                </Button>
-                <DeleteFormProcessButton
-                  processId={process.id}
-                  processName={formatProcessName(process)}
-                />
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <Badge
+      variant="outline"
+      className={`rounded-full border px-3 py-1 ${styles}`}
+    >
+      {label}
+    </Badge>
   );
 }
 
@@ -122,21 +176,33 @@ function formatProcessDate(value: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
-function formatJobStatus(status: FormProcessRead["current_job"] extends infer T
-  ? T extends { status: infer S }
-    ? S
-    : never
-  : never): string {
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatJobStatus(
+  status: FormProcessRead["current_job"] extends infer T
+    ? T extends { status: infer S }
+      ? S
+      : never
+    : never,
+): string {
   return typeof status === "string" ? status.replaceAll("_", " ") : "";
 }
 
 function formatProcessName(process: FormProcessRead): string {
-  const names = process.forms.map((form) => form.name).filter((name) => name.length > 0);
-  if (names.length === 0) {
-    return `this process from ${formatProcessDate(process.created_at)}`;
-  }
-  return `"${names.join(", ")}"`;
+  return `"${process.title}"`;
+}
+
+function formatShortProcessId(processId: string): string {
+  return `#${processId.slice(0, 8)}`;
 }

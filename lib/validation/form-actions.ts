@@ -19,7 +19,8 @@ export const barangayProfileFormSchema = z.object({
 });
 
 export const createFormProcessFormSchema = z.object({
-  formIds: z.array(nonEmptyString(255)).min(1).max(2),
+  title: nonEmptyString(160),
+  formIds: z.array(nonEmptyString(255)).min(1),
   context: nonEmptyString(3000),
 });
 

@@ -24,6 +24,7 @@ type CreateFormProcessFormProps = {
 export function CreateFormProcessForm({
   forms,
 }: CreateFormProcessFormProps) {
+  const [title, setTitle] = useState("");
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -42,10 +43,6 @@ export function CreateFormProcessForm({
         return current.filter((value) => value !== formId);
       }
 
-      if (current.length >= 2) {
-        return current;
-      }
-
       return [...current, formId];
     });
   }
@@ -54,7 +51,9 @@ export function CreateFormProcessForm({
     .map((selectedFormId) => forms.find((form) => form.id === selectedFormId))
     .filter((form): form is FormOption => form !== undefined);
   const canSubmit =
-    selectedFormIds.length > 0 && context.trim().length > 0;
+    title.trim().length > 0 &&
+    selectedFormIds.length > 0 &&
+    context.trim().length > 0;
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -75,6 +74,18 @@ export function CreateFormProcessForm({
 
   return (
     <form action={createFormProcessAction} className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="title">Process Title</Label>
+        <Input
+          id="title"
+          name="title"
+          required
+          maxLength={160}
+          placeholder="Enter a clear process title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </div>
       <div className="space-y-2">
         <Label>Source Forms</Label>
         <div className="space-y-3">
@@ -111,8 +122,6 @@ export function CreateFormProcessForm({
                   ) : (
                     filteredForms.map((form) => {
                       const isSelected = selectedFormIds.includes(form.id);
-                      const isDisabled =
-                        !isSelected && selectedFormIds.length >= 2;
 
                       return (
                         <button
@@ -120,7 +129,6 @@ export function CreateFormProcessForm({
                           type="button"
                           className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => handleFormToggle(form.id)}
-                          disabled={isDisabled}
                         >
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-zinc-900">

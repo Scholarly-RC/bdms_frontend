@@ -6,21 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { backendFetchFromSession } from "@/lib/api/server";
 
-type FormRead = {
-  id: string;
-  name: string;
-};
-
-async function fetchForms(): Promise<FormRead[]> {
-  const response = await backendFetchFromSession("/forms", { method: "GET" });
-  if (!response.ok) {
-    throw new Error("Unable to load forms.");
-  }
-
-  const payload = (await response.json()) as FormRead[];
-  return payload;
-}
-
 async function fetchFormProcesses(): Promise<FormProcessRead[]> {
   const response = await backendFetchFromSession("/processes", {
     method: "GET",
@@ -34,10 +19,7 @@ async function fetchFormProcesses(): Promise<FormProcessRead[]> {
 }
 
 export default async function FormProcessesPage() {
-  const [forms, processes] = await Promise.all([
-    fetchForms(),
-    fetchFormProcesses(),
-  ]);
+  const processes = await fetchFormProcesses();
 
   return (
     <div className="space-y-4">
@@ -47,13 +29,14 @@ export default async function FormProcessesPage() {
             Form Processes
           </h1>
           <p className="text-sm text-zinc-500">
-            Active and historical process records from backend API.
+            Review process runs and open items that need attention.
           </p>
         </div>
         <Button asChild className="rounded-lg">
           <Link href="/form-processes/new">Create process</Link>
         </Button>
       </header>
+
       <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
         <CardContent className="p-0">
           {processes.length === 0 ? (
@@ -61,7 +44,7 @@ export default async function FormProcessesPage() {
               No form processes found.
             </p>
           ) : (
-            <FormProcessesTable forms={forms} processes={processes} />
+            <FormProcessesTable processes={processes} />
           )}
         </CardContent>
       </Card>

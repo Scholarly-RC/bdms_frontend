@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  FileText,
   LoaderCircle,
   Pencil,
   RefreshCw,
@@ -41,7 +43,10 @@ type FormProcessReviewEditorProps = {
   processForm: FormProcessFormRead;
 };
 
-const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>(["queued", "filling"]);
+const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>([
+  "queued",
+  "filling",
+]);
 
 export function FormProcessReviewEditor({
   process,
@@ -57,10 +62,20 @@ export function FormProcessReviewEditor({
       },
     [processForm],
   );
-  const [activeCandidateIndex, setActiveCandidateIndex] = useState<number | null>(null);
-  const [candidates, setCandidates] = useState<PdfFieldCandidate[]>(initialResult.candidates);
-  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
-  const [pendingValueEditIndex, setPendingValueEditIndex] = useState<number | null>(null);
+  const [activeCandidateIndex, setActiveCandidateIndex] = useState<
+    number | null
+  >(null);
+  const [candidates, setCandidates] = useState<PdfFieldCandidate[]>(
+    initialResult.candidates,
+  );
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(
+    null,
+  );
+  const [pendingValueEditIndex, setPendingValueEditIndex] = useState<
+    number | null
+  >(null);
+  const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [pendingLabel, setPendingLabel] = useState("");
   const [pendingRule, setPendingRule] = useState("");
   const [pendingValue, setPendingValue] = useState("");
@@ -71,7 +86,9 @@ export function FormProcessReviewEditor({
   const detectedFieldsListRef = useRef<HTMLDivElement | null>(null);
   const isEditable = process.status === "ready_for_review";
   const isFinalized = process.status === "finalized";
-  const filledCount = candidates.filter((candidate) => candidate.value.trim().length > 0).length;
+  const filledCount = candidates.filter(
+    (candidate) => candidate.value.trim().length > 0,
+  ).length;
   const emptyCount = candidates.length - filledCount;
 
   useEffect(() => {
@@ -91,13 +108,19 @@ export function FormProcessReviewEditor({
     () =>
       candidates
         .map((candidate, index) => ({ candidate, index }))
-        .sort((left, right) => compareCandidatesByPdfPosition(left.candidate, right.candidate)),
+        .sort((left, right) =>
+          compareCandidatesByPdfPosition(left.candidate, right.candidate),
+        ),
     [candidates],
   );
 
   useEffect(() => {
     setCandidates(initialResult.candidates);
   }, [initialResult]);
+
+  useEffect(() => {
+    setActiveCandidateIndex(null);
+  }, [processForm.id]);
 
   useEffect(() => {
     if (activeCandidateIndex === null) {
@@ -226,13 +249,16 @@ export function FormProcessReviewEditor({
   async function handleFinalize() {
     setIsFinalizing(true);
     try {
-      const response = await fetch(`/api/processes/${encodeURIComponent(process.id)}`, {
-        body: JSON.stringify({ status: "finalized" }),
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/processes/${encodeURIComponent(process.id)}`,
+        {
+          body: JSON.stringify({ status: "finalized" }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "PATCH",
         },
-        method: "PATCH",
-      });
+      );
 
       if (!response.ok) {
         throw new Error("Unable to finalize form process.");
@@ -246,31 +272,8 @@ export function FormProcessReviewEditor({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card className="border-zinc-300/70 bg-white/85 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="text-xl">{processForm.name}</CardTitle>
-              <p className="text-sm text-zinc-600">{processForm.description}</p>
-              <p className="text-sm text-zinc-500">{process.context}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={process.status} />
-              {POLLABLE_STATUSES.has(process.status) ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    router.refresh();
-                  }}
-                >
-                  <RefreshCw className="size-4" />
-                  Refresh
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
           <CardContent className="space-y-4">
             {process.failure_reason ? (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -283,16 +286,36 @@ export function FormProcessReviewEditor({
                 {process.current_job.status.replaceAll("_", " ")}
               </div>
             ) : null}
-            <div className="flex items-center justify-between gap-3">
-              <SaveBadge saveState={saveState} />
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" asChild>
-                  <Link href={`/forms/${encodeURIComponent(processForm.source_form_id)}/preview`}>
-                    Open master form
-                  </Link>
-                </Button>
+            {!isEditable ? (
+              <p className="text-sm text-zinc-500">
+                {isFinalized
+                  ? "This process is finalized and read-only."
+                  : "Field editing unlocks once the process reaches Ready for review."}
+              </p>
+            ) : null}
+            {isFinalized ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <SummaryCard
+                  label="Total fields"
+                  value={String(candidates.length)}
+                />
+                <SummaryCard
+                  label="Filled values"
+                  value={String(filledCount)}
+                />
+                <SummaryCard label="Empty values" value={String(emptyCount)} />
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between gap-2 overflow-x-auto">
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusBadge status={process.status} />
+                <SaveBadge saveState={saveState} />
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
                 <Button
                   type="button"
+                  size="sm"
+                  className="h-8 px-2.5"
                   disabled={!isEditable || isFinalizing}
                   onClick={() => {
                     void handleFinalize();
@@ -304,38 +327,72 @@ export function FormProcessReviewEditor({
                       Finalizing...
                     </>
                   ) : (
-                    "Finalize process"
+                    <>
+                      <CheckCircle2 className="size-4" />
+                      Finalize
+                    </>
                   )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5"
+                  onClick={() => {
+                    setIsPreviewMode((current) => !current);
+                  }}
+                >
+                  {isPreviewMode ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                  Preview
+                </Button>
+                {POLLABLE_STATUSES.has(process.status) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5"
+                    onClick={() => {
+                      router.refresh();
+                    }}
+                  >
+                    <RefreshCw className="size-4" />
+                    Refresh
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5"
+                  onClick={() => {
+                    setIsContextDialogOpen(true);
+                  }}
+                >
+                  <FileText className="size-4" />
+                  Context
                 </Button>
               </div>
             </div>
-            {!isEditable ? (
-              <p className="text-sm text-zinc-500">
-                {isFinalized
-                  ? "This process is finalized and read-only."
-                  : "Field editing unlocks once the process reaches Ready for review."}
-              </p>
-            ) : null}
-            {isFinalized ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <SummaryCard label="Total fields" value={String(candidates.length)} />
-                <SummaryCard label="Filled values" value={String(filledCount)} />
-                <SummaryCard label="Empty values" value={String(emptyCount)} />
-              </div>
-            ) : null}
 
             <PdfPreviewViewer
               activeCandidateIndex={activeCandidateIndex}
               candidates={candidates}
               createCandidateRequest={0}
               fileUrl={`/api/forms/${encodeURIComponent(processForm.source_form_id)}/file`}
+              showBboxes={!isPreviewMode}
               onCandidateChange={(candidateIndex, nextBbox) => {
                 if (!isEditable) {
                   return;
                 }
                 setCandidates((current) =>
                   current.map((candidate, index) =>
-                    index === candidateIndex ? { ...candidate, bbox: nextBbox } : candidate,
+                    index === candidateIndex
+                      ? { ...candidate, bbox: nextBbox }
+                      : candidate,
                   ),
                 );
               }}
@@ -357,16 +414,18 @@ export function FormProcessReviewEditor({
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-300/70 bg-white/85 backdrop-blur-sm">
+        <Card className="self-start border-zinc-300/70 bg-white/85 backdrop-blur-sm lg:sticky lg:top-4">
           <CardHeader>
             <CardTitle>{isFinalized ? "Finalized Values" : "Fields"}</CardTitle>
           </CardHeader>
           <CardContent
             ref={detectedFieldsListRef}
-            className="max-h-[72vh] space-y-2 overflow-y-auto pr-2"
+            className="h-[calc(100vh-16rem)] space-y-2 overflow-y-auto pr-2"
           >
             {candidates.length === 0 ? (
-              <p className="text-sm text-zinc-600">No saved extraction data is available yet.</p>
+              <p className="text-sm text-zinc-600">
+                No saved extraction data is available yet.
+              </p>
             ) : (
               sortedCandidates.map(({ candidate, index }) => {
                 const isActive = index === activeCandidateIndex;
@@ -380,7 +439,9 @@ export function FormProcessReviewEditor({
                         : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
                     }`}
                     onClick={() => {
-                      setActiveCandidateIndex((current) => (current === index ? null : index));
+                      setActiveCandidateIndex((current) =>
+                        current === index ? null : index,
+                      );
                     }}
                   >
                     {normalizeCandidateText(candidate.rule) ? (
@@ -427,7 +488,9 @@ export function FormProcessReviewEditor({
                           className="size-8 rounded-full border-0 p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-cyan-600"
                           onClick={() => {
                             setPendingValueEditIndex(index);
-                            setPendingLabel(getCandidateEditableLabel(candidate));
+                            setPendingLabel(
+                              getCandidateEditableLabel(candidate),
+                            );
                             setPendingRule(candidate.rule ?? "");
                             setPendingValue(candidate.value ?? "");
                           }}
@@ -455,6 +518,33 @@ export function FormProcessReviewEditor({
         </Card>
       </div>
 
+      <Dialog open={isContextDialogOpen} onOpenChange={setIsContextDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Process context</DialogTitle>
+            <DialogDescription>
+              Reference text used to generate values for this process.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+              {process.context}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsContextDialogOpen(false);
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={pendingValueEditIndex !== null}
         onOpenChange={(open) => {
@@ -470,7 +560,8 @@ export function FormProcessReviewEditor({
           <DialogHeader>
             <DialogTitle>Modify field</DialogTitle>
             <DialogDescription>
-              Adjust the copied field label, custom rule, and current value for this process.
+              Adjust the copied field label, custom rule, and current value for
+              this process.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -640,7 +731,10 @@ function getCandidateDisplayName(candidate: PdfFieldCandidate): string {
 }
 
 function getCandidateEditableLabel(candidate: PdfFieldCandidate): string {
-  return normalizeCandidateText(candidate.label) || getCandidateDisplayName(candidate);
+  return (
+    normalizeCandidateText(candidate.label) ||
+    getCandidateDisplayName(candidate)
+  );
 }
 
 function normalizeFieldName(value: string): string {
@@ -699,8 +793,13 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
 
 function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
   return (
-    <Badge variant="secondary" className="rounded-full bg-zinc-100 text-zinc-700">
-      {status === "ready_for_review" ? "Ready for review" : status.replaceAll("_", " ")}
+    <Badge
+      variant="secondary"
+      className="rounded-full bg-zinc-100 text-zinc-700"
+    >
+      {status === "ready_for_review"
+        ? "Ready for review"
+        : status.replaceAll("_", " ")}
     </Badge>
   );
 }
@@ -708,7 +807,9 @@ function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-      <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
+      <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
+        {label}
+      </p>
       <p className="mt-1 text-2xl font-semibold text-zinc-950">{value}</p>
     </div>
   );

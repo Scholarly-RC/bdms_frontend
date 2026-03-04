@@ -31,7 +31,7 @@ export default async function NewFormProcessPage() {
             Create Form Process
           </h1>
           <p className="text-sm text-zinc-500">
-            Create one AI-filled process for each selected master form.
+            Create one AI-filled process from one or more selected master forms.
           </p>
         </div>
         <Button asChild variant="outline" className="rounded-lg">
@@ -44,7 +44,7 @@ export default async function NewFormProcessPage() {
             Process Details
           </h2>
           <p className="text-sm text-zinc-500">
-            Each selected master form will be copied into its own process and queued for AI filling.
+            Selected master forms will be copied into one process and queued for AI filling.
           </p>
         </CardHeader>
         <CardContent>
