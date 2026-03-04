@@ -1,18 +1,14 @@
-import { CreateFormProcessDialog } from "@/app/(workspace)/form-processes/_components/create-form-process-dialog";
+import Link from "next/link";
+
+import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
+import { FormProcessesTable } from "@/app/(workspace)/form-processes/_components/form-processes-table";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { backendFetchFromSession } from "@/lib/api/server";
 
 type FormRead = {
   id: string;
   name: string;
-};
-
-type FormProcessRead = {
-  id: string;
-  form_id: string;
-  context: string;
-  status: string;
-  created_at: string;
 };
 
 async function fetchForms(): Promise<FormRead[]> {
@@ -42,7 +38,6 @@ export default async function FormProcessesPage() {
     fetchForms(),
     fetchFormProcesses(),
   ]);
-  const formNames = new Map(forms.map((form) => [form.id, form.name]));
 
   return (
     <div className="space-y-4">
@@ -55,32 +50,18 @@ export default async function FormProcessesPage() {
             Active and historical process records from backend API.
           </p>
         </div>
-        <CreateFormProcessDialog forms={forms} />
+        <Button asChild className="rounded-lg">
+          <Link href="/form-processes/new">Create process</Link>
+        </Button>
       </header>
       <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
-        <CardContent className="space-y-3">
+        <CardContent className="p-0">
           {processes.length === 0 ? (
-            <p className="pt-6 text-sm text-zinc-600">
+            <p className="px-6 py-8 text-sm text-zinc-600">
               No form processes found.
             </p>
           ) : (
-            processes.map((process) => (
-              <div
-                key={process.id}
-                className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4"
-              >
-                <p className="font-medium text-zinc-900">
-                  {formNames.get(process.form_id) ?? "Unknown form"}
-                </p>
-                <p className="text-sm text-zinc-600">{process.context}</p>
-                <p className="text-xs text-zinc-500">
-                  Status: {process.status}
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Process ID: {process.id}
-                </p>
-              </div>
-            ))
+            <FormProcessesTable forms={forms} processes={processes} />
           )}
         </CardContent>
       </Card>

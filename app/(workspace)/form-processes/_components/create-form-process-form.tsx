@@ -1,0 +1,185 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronsUpDown, Search, X } from "lucide-react";
+
+import { createFormProcessAction } from "@/app/(workspace)/form-processes/_actions/form-processes";
+import { CreateFormProcessSubmitButton } from "@/app/(workspace)/form-processes/_components/create-form-process-submit-button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+type FormOption = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+type CreateFormProcessFormProps = {
+  forms: FormOption[];
+};
+
+export function CreateFormProcessForm({
+  forms,
+}: CreateFormProcessFormProps) {
+  const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [context, setContext] = useState("");
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const filteredForms = forms.filter((form) =>
+    `${form.name} ${form.description}`
+      .toLowerCase()
+      .includes(searchValue.trim().toLowerCase()),
+  );
+
+  function handleFormToggle(formId: string) {
+    setSelectedFormIds((current) => {
+      if (current.includes(formId)) {
+        return current.filter((value) => value !== formId);
+      }
+
+      if (current.length >= 2) {
+        return current;
+      }
+
+      return [...current, formId];
+    });
+  }
+
+  const selectedForms = selectedFormIds
+    .map((selectedFormId) => forms.find((form) => form.id === selectedFormId))
+    .filter((form): form is FormOption => form !== undefined);
+  const canSubmit =
+    selectedFormIds.length > 0 && context.trim().length > 0;
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!dropdownRef.current) {
+        return;
+      }
+
+      if (!dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, []);
+
+  return (
+    <form action={createFormProcessAction} className="space-y-6">
+      <div className="space-y-2">
+        <Label>Source Forms</Label>
+        <div className="space-y-3">
+          <div ref={dropdownRef} className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full justify-between rounded-md px-3 font-normal"
+              onClick={() => setIsDropdownOpen((current) => !current)}
+            >
+              <span className="truncate text-left text-sm">
+                {selectedFormIds.length > 0
+                  ? `${selectedFormIds.length} form${selectedFormIds.length === 1 ? "" : "s"} selected`
+                  : "Search and select forms"}
+              </span>
+              <ChevronsUpDown className="size-4 text-zinc-500" />
+            </Button>
+            {isDropdownOpen ? (
+              <div className="absolute z-10 mt-2 w-full rounded-md border border-zinc-200 bg-white p-2 shadow-lg">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-400" />
+                  <Input
+                    value={searchValue}
+                    onChange={(event) => setSearchValue(event.target.value)}
+                    placeholder="Search forms..."
+                    className="pl-9"
+                  />
+                </div>
+                <div className="mt-2 max-h-56 overflow-y-auto">
+                  {filteredForms.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-zinc-500">
+                      No matching forms.
+                    </p>
+                  ) : (
+                    filteredForms.map((form) => {
+                      const isSelected = selectedFormIds.includes(form.id);
+                      const isDisabled =
+                        !isSelected && selectedFormIds.length >= 2;
+
+                      return (
+                        <button
+                          key={form.id}
+                          type="button"
+                          className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => handleFormToggle(form.id)}
+                          disabled={isDisabled}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-zinc-900">
+                              {form.name}
+                            </span>
+                            <span className="block text-xs text-zinc-500">
+                              {form.description || "No description"}
+                            </span>
+                          </span>
+                          {isSelected ? (
+                            <Check className="mt-0.5 size-4 shrink-0 text-zinc-700" />
+                          ) : null}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {selectedForms.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedForms.map((form) => (
+                <Badge
+                  key={form.id}
+                  variant="secondary"
+                  className="gap-1 rounded-full bg-zinc-100 px-3 py-1 text-zinc-700"
+                  title={form.description || undefined}
+                >
+                  <input type="hidden" name="form_ids" value={form.id} />
+                  <span>{form.name}</span>
+                  <button
+                    type="button"
+                    className="rounded-full text-zinc-500 hover:text-zinc-900"
+                    onClick={() => handleFormToggle(form.id)}
+                    aria-label={`Remove ${form.name}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="context">Context</Label>
+        <Textarea
+          id="context"
+          name="context"
+          required
+          maxLength={3000}
+          placeholder="Provide the information the AI should use to fill the selected form."
+          value={context}
+          onChange={(event) => setContext(event.target.value)}
+          className="h-56 overflow-y-auto resize-none"
+        />
+      </div>
+      <CreateFormProcessSubmitButton canSubmit={canSubmit} />
+    </form>
+  );
+}

@@ -19,9 +19,8 @@ export const barangayProfileFormSchema = z.object({
 });
 
 export const createFormProcessFormSchema = z.object({
-  formId: nonEmptyString(255),
-  context: nonEmptyString(1000),
-  status: z.string().trim().max(120).default("draft"),
+  formIds: z.array(nonEmptyString(255)).min(1).max(2),
+  context: nonEmptyString(3000),
 });
 
 export const createFormFormSchema = z.object({
@@ -40,4 +39,8 @@ export const createFormFormSchema = z.object({
 
 export const deleteFormSchema = z.object({
   formId: z.uuid(),
+});
+
+export const deleteFormProcessSchema = z.object({
+  processId: z.uuid(),
 });

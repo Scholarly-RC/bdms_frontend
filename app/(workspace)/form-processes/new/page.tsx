@@ -1,0 +1,56 @@
+import Link from "next/link";
+
+import { CreateFormProcessForm } from "@/app/(workspace)/form-processes/_components/create-form-process-form";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { backendFetchFromSession } from "@/lib/api/server";
+
+type FormRead = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+async function fetchForms(): Promise<FormRead[]> {
+  const response = await backendFetchFromSession("/forms", { method: "GET" });
+  if (!response.ok) {
+    throw new Error("Unable to load forms.");
+  }
+
+  return (await response.json()) as FormRead[];
+}
+
+export default async function NewFormProcessPage() {
+  const forms = await fetchForms();
+
+  return (
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
+            Create Form Process
+          </h1>
+          <p className="text-sm text-zinc-500">
+            Create one AI-filled process for each selected master form.
+          </p>
+        </div>
+        <Button asChild variant="outline" className="rounded-lg">
+          <Link href="/form-processes">Back to processes</Link>
+        </Button>
+      </header>
+      <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
+        <CardHeader className="space-y-1">
+          <h2 className="text-lg font-semibold text-zinc-950">
+            Process Details
+          </h2>
+          <p className="text-sm text-zinc-500">
+            Each selected master form will be copied into its own process and queued for AI filling.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <CreateFormProcessForm forms={forms} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

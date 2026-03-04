@@ -40,7 +40,7 @@ export function WorkspaceSidebar({ appRole }: WorkspaceSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="rounded-2xl border border-zinc-300/70 bg-white/75 p-4 shadow-sm backdrop-blur-sm lg:p-5">
+    <aside className="flex h-[calc(100svh-2rem)] flex-col rounded-2xl border border-zinc-300/70 bg-white/75 p-4 shadow-sm backdrop-blur-sm sm:h-[calc(100svh-3rem)] sm:sticky sm:top-6 lg:h-[calc(100svh-4rem)] lg:top-8 lg:p-5">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-zinc-500">BDMS</p>
@@ -57,7 +57,7 @@ export function WorkspaceSidebar({ appRole }: WorkspaceSidebarProps) {
 
       <Separator className="my-4" />
 
-      <nav className="space-y-2 text-sm">
+      <nav className="flex-1 space-y-2 overflow-y-auto pr-1 text-sm">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
