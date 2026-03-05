@@ -44,7 +44,8 @@ export default async function NewFormProcessPage() {
             Process Details
           </h2>
           <p className="text-sm text-zinc-500">
-            Selected master forms will be copied into one process and queued for AI filling.
+            Selected master forms will be copied into one process and queued for
+            AI filling.
           </p>
         </CardHeader>
         <CardContent>

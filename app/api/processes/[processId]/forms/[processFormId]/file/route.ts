@@ -15,30 +15,28 @@ import { refreshSession } from "@/lib/auth/server";
 type Params = {
   params: Promise<{
     processId: string;
+    processFormId: string;
   }>;
 };
 
-export async function PATCH(
-  request: Request,
-  context: Params,
-): Promise<Response> {
-  const { processId } = await context.params;
+export async function GET(_: Request, context: Params): Promise<Response> {
+  const { processId, processFormId } = await context.params;
   const normalizedProcessId = processId.trim();
-  const body = await request.text();
+  const normalizedProcessFormId = processFormId.trim();
 
-  if (!normalizedProcessId) {
-    return Response.json({ detail: "Invalid process id." }, { status: 400 });
+  if (!normalizedProcessId || !normalizedProcessFormId) {
+    return Response.json(
+      { detail: "Invalid process form id." },
+      { status: 400 },
+    );
   }
 
   const forwarded = await fetchWithSessionRefresh(
-    `/processes/${encodeURIComponent(normalizedProcessId)}`,
+    `/processes/${encodeURIComponent(normalizedProcessId)}/forms/${encodeURIComponent(
+      normalizedProcessFormId,
+    )}/file`,
     {
-      body,
-      headers: {
-        "Content-Type":
-          request.headers.get("content-type") ?? "application/json",
-      },
-      method: "PATCH",
+      method: "GET",
     },
   );
 
@@ -93,13 +91,17 @@ async function toClientResponse({
   response,
   refreshedSession,
 }: ForwardedResponse): Promise<Response> {
-  const text = await response.text();
+  const body = await response.arrayBuffer();
   const contentType =
-    response.headers.get("content-type") ?? "application/json";
-  const clientResponse = new NextResponse(text, {
+    response.headers.get("content-type") ?? "application/octet-stream";
+  const contentDisposition = response.headers.get("content-disposition");
+  const clientResponse = new NextResponse(body, {
     status: response.status,
     headers: {
       "Content-Type": contentType,
+      ...(contentDisposition
+        ? { "Content-Disposition": contentDisposition }
+        : {}),
     },
   });
 

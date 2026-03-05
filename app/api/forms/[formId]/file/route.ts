@@ -29,7 +29,9 @@ export async function GET(_: Request, context: Params): Promise<Response> {
     status: response.status,
     headers: {
       "Content-Type": contentType,
-      ...(contentDisposition ? { "Content-Disposition": contentDisposition } : {}),
+      ...(contentDisposition
+        ? { "Content-Disposition": contentDisposition }
+        : {}),
     },
   });
 }

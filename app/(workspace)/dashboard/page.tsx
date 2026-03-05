@@ -1,8 +1,8 @@
 import { CalendarRange, Clock3, Layers } from "lucide-react";
 
 import { DashboardAlertsButton } from "@/components/shared/dashboard-alerts-button";
+import { Pill } from "@/components/shared/pill";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -96,13 +96,13 @@ export default function DashboardPage() {
               <div className="mb-2 flex items-center gap-2 text-sm font-medium">
                 <CalendarRange className="size-4" /> Monthly audit pack
               </div>
-              <Badge variant="secondary">Due tomorrow</Badge>
+              <Pill value="due tomorrow" variant="secondary" />
             </div>
             <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium">
                 <Clock3 className="size-4" /> Incident postmortem review
               </div>
-              <Badge variant="outline">In progress</Badge>
+              <Pill value="in progress" variant="outline" />
             </div>
           </CardContent>
         </Card>

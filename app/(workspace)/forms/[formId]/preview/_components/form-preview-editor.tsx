@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -10,22 +9,18 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { CandidatePdfViewer } from "@/app/(workspace)/forms/_components/candidate-pdf-viewer";
 import type {
   FormRead,
   PdfFieldCandidate,
   PdfFieldParseResult,
   SaveState,
 } from "@/app/(workspace)/forms/_lib/types";
-import { PdfPreviewViewer } from "@/app/(workspace)/forms/[formId]/preview/_components/pdf-preview-viewer";
+import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,12 +30,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useDebouncedCallback } from "@/lib/hooks/use-debounced-callback";
 
 type FormPreviewEditorProps = {
   form: FormRead;
 };
 
 export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
+  const POSITION_SAVE_DEBOUNCE_MS = 350;
   const initialResult: PdfFieldParseResult = useMemo(
     () =>
       form.extracted_fields_json ?? {
@@ -51,12 +48,18 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
     [form],
   );
 
-  const [activeCandidateIndex, setActiveCandidateIndex] = useState<number | null>(null);
+  const [activeCandidateIndex, setActiveCandidateIndex] = useState<
+    number | null
+  >(null);
   const [candidates, setCandidates] = useState<PdfFieldCandidate[]>(
     initialResult.candidates,
   );
-  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
-  const [pendingValueEditIndex, setPendingValueEditIndex] = useState<number | null>(null);
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(
+    null,
+  );
+  const [pendingValueEditIndex, setPendingValueEditIndex] = useState<
+    number | null
+  >(null);
   const [pendingLabel, setPendingLabel] = useState("");
   const [pendingRule, setPendingRule] = useState("");
   const [pendingValue, setPendingValue] = useState("");
@@ -69,7 +72,9 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
     () =>
       candidates
         .map((candidate, index) => ({ candidate, index }))
-        .sort((left, right) => compareCandidatesByPdfPosition(left.candidate, right.candidate)),
+        .sort((left, right) =>
+          compareCandidatesByPdfPosition(left.candidate, right.candidate),
+        ),
     [candidates],
   );
 
@@ -108,19 +113,18 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
     [form.id, initialResult],
   );
 
-  const handleCandidateChange = useCallback(
-    (candidateIndex: number, nextBbox: PdfFieldCandidate["bbox"]) => {
-      setCandidates((current) =>
-        current.map((candidate, index) =>
-          index === candidateIndex ? { ...candidate, bbox: nextBbox } : candidate,
-        ),
-      );
-    },
-    [],
-  );
+  const {
+    cancel: cancelDebouncedPositionSave,
+    run: queueDebouncedPositionSave,
+  } = useDebouncedCallback<PdfFieldCandidate[]>((nextCandidates) => {
+    void savePayload(nextCandidates).catch(() => {
+      setSaveState("error");
+    });
+  }, POSITION_SAVE_DEBOUNCE_MS);
 
   const handleCandidateCreate = useCallback(
     (nextCandidate: PdfFieldCandidate) => {
+      cancelDebouncedPositionSave();
       const nextCandidates = [...candidates, nextCandidate];
       setCandidates(nextCandidates);
       setActiveCandidateIndex(nextCandidates.length - 1);
@@ -128,7 +132,7 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
         setSaveState("error");
       });
     },
-    [candidates, savePayload],
+    [cancelDebouncedPositionSave, candidates, savePayload],
   );
 
   const handleCandidateSelect = useCallback((candidateIndex: number | null) => {
@@ -249,6 +253,14 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
     });
   }, [activeCandidateIndex]);
 
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -272,20 +284,15 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         <Card className="min-w-0 flex-1 border-zinc-300/70 bg-white/85 backdrop-blur-sm">
           <CardContent>
-            <PdfPreviewViewer
+            <CandidatePdfViewer
               activeCandidateIndex={activeCandidateIndex}
               createCandidateRequest={createCandidateRequest}
               candidates={candidates}
               fileUrl={`/api/forms/${encodeURIComponent(form.id)}/file`}
-              onCandidateChange={handleCandidateChange}
-              onCandidateCommit={() => {
-                const nextCandidates = candidates;
-                void savePayload(nextCandidates).catch(() => {
-                  setSaveState("error");
-                });
-              }}
+              onCommitCandidates={queueDebouncedPositionSave}
               onCandidateCreate={handleCandidateCreate}
               onCandidateSelect={handleCandidateSelect}
+              onSetCandidates={setCandidates}
             />
           </CardContent>
         </Card>
@@ -325,49 +332,54 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                           ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-200"
                           : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
                       }`}
-                      onClick={() => {
-                        handleCandidateSelect(index);
-                      }}
                     >
-                      {normalizeCandidateText(candidate.rule) ? (
-                        <span
-                          className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
-                          title="This field has a custom rule."
-                        >
-                          <AlertCircle className="size-3.5" />
-                          <span className="sr-only">This field has a custom rule.</span>
-                        </span>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="block w-full text-left"
+                        onClick={() => {
+                          handleCandidateSelect(index);
+                        }}
+                      >
+                        {normalizeCandidateText(candidate.rule) ? (
+                          <span
+                            className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
+                            title="This field has a custom rule."
+                          >
+                            <AlertCircle className="size-3.5" />
+                            <span className="sr-only">
+                              This field has a custom rule.
+                            </span>
+                          </span>
+                        ) : null}
                         <div className="min-w-0 flex-1 space-y-3">
-                        <div className="flex w-full items-start justify-between gap-3 pr-10 text-left">
-                          <div className="min-w-0">
+                          <div className="flex w-full items-start justify-between gap-3 pr-10 text-left">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
+                                Name
+                              </p>
+                              <p className="truncate text-sm font-medium text-zinc-900">
+                                {getCandidateDisplayName(candidate)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
                             <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                              Name
+                              Value
                             </p>
-                            <p className="truncate text-sm font-medium text-zinc-900">
-                              {getCandidateDisplayName(candidate)}
+                            <p className="text-sm text-zinc-700">
+                              {candidate.value?.trim() ? (
+                                candidate.value
+                              ) : (
+                                <span className="text-zinc-400">No value</span>
+                              )}
                             </p>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                            Value
-                          </p>
-                          <p className="text-sm text-zinc-700">
-                            {candidate.value?.trim() ? (
-                              candidate.value
-                            ) : (
-                              <span className="text-zinc-400">No value</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
+                      </button>
                       {isActive ? (
-                        <div
+                        <span
                           className="absolute right-3 bottom-3 flex items-center gap-1"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
+                          aria-hidden="true"
                         >
                           <Button
                             type="button"
@@ -377,7 +389,9 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                             title="Modify field"
                             onClick={() => {
                               setPendingValueEditIndex(index);
-                              setPendingLabel(getCandidateEditableLabel(candidate));
+                              setPendingLabel(
+                                getCandidateEditableLabel(candidate),
+                              );
                               setPendingRule(candidate.rule ?? "");
                               setPendingValue(candidate.value ?? "");
                             }}
@@ -395,9 +409,11 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
                             }}
                           >
                             <Trash2 className="size-4" />
-                            <span className="sr-only">Delete extracted field</span>
+                            <span className="sr-only">
+                              Delete extracted field
+                            </span>
                           </Button>
-                        </div>
+                        </span>
                       ) : null}
                     </div>
                   );
@@ -423,7 +439,8 @@ export function FormPreviewEditor({ form }: FormPreviewEditorProps) {
           <DialogHeader>
             <DialogTitle>Modify field</DialogTitle>
             <DialogDescription>
-              Update the detected field label, value, and rule for this form preview.
+              Update the detected field label, value, and rule for this form
+              preview.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -604,7 +621,10 @@ function normalizeCandidateText(value: string | null | undefined): string {
 }
 
 function getCandidateEditableLabel(candidate: PdfFieldCandidate): string {
-  return normalizeCandidateText(candidate.label) || getCandidateDisplayName(candidate);
+  return (
+    normalizeCandidateText(candidate.label) ||
+    getCandidateDisplayName(candidate)
+  );
 }
 
 function normalizeFieldName(value: string): string {
@@ -643,26 +663,32 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
 
   if (saveState === "saving") {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600">
-        <LoaderCircle className="size-3.5 animate-spin" />
-        Saving...
-      </div>
+      <Pill
+        value="saving"
+        icon={<LoaderCircle className="size-3.5 animate-spin" />}
+        variant="outline"
+        className="border-zinc-300 bg-white py-1.5 text-zinc-600"
+      />
     );
   }
 
   if (saveState === "saved") {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
-        <CheckCircle2 className="size-3.5" />
-        Saved
-      </div>
+      <Pill
+        value="saved"
+        icon={<CheckCircle2 className="size-3.5" />}
+        variant="outline"
+        className="border-emerald-300 bg-emerald-50 py-1.5 text-emerald-700"
+      />
     );
   }
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
-      <TriangleAlert className="size-3.5" />
-      Save failed
-    </div>
+    <Pill
+      value="save_failed"
+      icon={<TriangleAlert className="size-3.5" />}
+      variant="outline"
+      className="border-amber-300 bg-amber-50 py-1.5 text-amber-800"
+    />
   );
 }

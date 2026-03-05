@@ -7,6 +7,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import Image from "next/image";
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PdfFieldCandidate } from "@/app/(workspace)/forms/_lib/types";
@@ -36,12 +38,14 @@ type RenderedPage = {
   width: number;
 };
 
+type ResizeHandle = "nw" | "ne" | "sw" | "se";
 type DragMode = "move" | "resize";
 
 type ActiveInteraction = {
   candidateIndex: number;
   containerRect: DOMRect;
   hasChanged: boolean;
+  handle?: ResizeHandle;
   mode: DragMode;
   page: RenderedPage;
   startBbox: PdfFieldCandidate["bbox"];
@@ -53,7 +57,9 @@ const MIN_BOX_SIZE = 8;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.2;
-const BASE_OVERLAY_FONT_SIZE = 10;
+const BASE_OVERLAY_FONT_SIZE = 11;
+const OVERLAY_FONT_FAMILY =
+  '"Bookman Old Style", "URW Bookman L", "Bookman", "Times New Roman", serif';
 
 export function PdfPreviewViewer({
   activeCandidateIndex,
@@ -180,17 +186,13 @@ export function PdfPreviewViewer({
         );
         nextBbox = [nextX1, nextY1, nextX1 + bboxWidth, nextY1 + bboxHeight];
       } else {
-        const nextX2 = clamp(
-          x2 + deltaX,
-          x1 + MIN_BOX_SIZE,
-          interaction.page.pdfWidth,
-        );
-        const nextY2 = clamp(
-          y2 + deltaY,
-          y1 + MIN_BOX_SIZE,
-          interaction.page.pdfHeight,
-        );
-        nextBbox = [x1, y1, nextX2, nextY2];
+        nextBbox = resizeBboxFromHandle({
+          handle: interaction.handle ?? "se",
+          page: interaction.page,
+          startBbox: interaction.startBbox,
+          deltaX,
+          deltaY,
+        });
       }
 
       const roundedBbox = roundBbox(nextBbox);
@@ -224,6 +226,79 @@ export function PdfPreviewViewer({
       window.removeEventListener("pointercancel", handlePointerUp);
     };
   }, [onCandidateChange, onCandidateCommit]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (activeCandidateIndex === null) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+
+      let deltaX = 0;
+      let deltaY = 0;
+      if (event.key === "ArrowLeft") {
+        deltaX = -1;
+      } else if (event.key === "ArrowRight") {
+        deltaX = 1;
+      } else if (event.key === "ArrowUp") {
+        deltaY = -1;
+      } else if (event.key === "ArrowDown") {
+        deltaY = 1;
+      } else {
+        return;
+      }
+
+      const candidate = candidates[activeCandidateIndex];
+      if (!candidate) {
+        return;
+      }
+
+      const page = pages.find((item) => item.pageNumber === candidate.page);
+      if (!page) {
+        return;
+      }
+
+      event.preventDefault();
+      const [x1, y1, x2, y2] = candidate.bbox;
+      const width = x2 - x1;
+      const height = y2 - y1;
+      const nextX1 = clamp(x1 + deltaX, 0, page.pdfWidth - width);
+      const nextY1 = clamp(y1 + deltaY, 0, page.pdfHeight - height);
+      const nextBbox = roundBbox([
+        nextX1,
+        nextY1,
+        nextX1 + width,
+        nextY1 + height,
+      ]);
+      if (isSameBbox(nextBbox, candidate.bbox)) {
+        return;
+      }
+
+      onCandidateChange(activeCandidateIndex, nextBbox);
+      onCandidateCommit();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    activeCandidateIndex,
+    candidates,
+    onCandidateChange,
+    onCandidateCommit,
+    pages,
+  ]);
 
   const pageCandidates = useMemo(
     () =>
@@ -347,12 +422,16 @@ export function PdfPreviewViewer({
                       aspectRatio: `${page.width} / ${page.height}`,
                       width: `${zoom * 100}%`,
                     }}
+                    onPointerDown={() => {
+                      onCandidateSelect(null);
+                    }}
                   >
-                    <img
+                    <Image
                       src={page.dataUrl}
                       alt={`PDF page ${page.pageNumber}`}
                       className="block h-auto w-full max-w-none"
                       height={page.height}
+                      unoptimized
                       width={page.width}
                     />
                     {pageItems.map(({ candidate, index }) => {
@@ -362,6 +441,8 @@ export function PdfPreviewViewer({
                       const width = ((x2 - x1) / page.pdfWidth) * 100;
                       const height = ((y2 - y1) / page.pdfHeight) * 100;
                       const isActive = activeCandidateIndex === index;
+                      const hideBoxOnly =
+                        activeCandidateIndex !== null && !isActive;
                       const overlayFontSize = clamp(
                         BASE_OVERLAY_FONT_SIZE * zoom,
                         8,
@@ -384,6 +465,7 @@ export function PdfPreviewViewer({
                             <span
                               className="absolute inset-0 overflow-hidden px-1 py-0.5 leading-tight text-zinc-800/90"
                               style={{
+                                fontFamily: OVERLAY_FONT_FAMILY,
                                 fontSize: `${overlayFontSize}px`,
                               }}
                             >
@@ -398,10 +480,12 @@ export function PdfPreviewViewer({
                           key={`${candidate.page}-${candidate.span_index}-${index}`}
                           type="button"
                           data-candidate-index={index}
-                          className={`absolute overflow-hidden rounded-sm border text-left transition ${
-                            isActive
-                              ? "border-cyan-500/95 bg-cyan-400/16 shadow-[0_0_0_2px_rgba(6,182,212,0.24)]"
-                              : "border-emerald-600/70 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(5,150,105,0.16)]"
+                          className={`absolute overflow-hidden text-left transition ${
+                            hideBoxOnly
+                              ? "border-transparent bg-transparent shadow-none"
+                              : isActive
+                                ? "border border-cyan-500/95 bg-cyan-400/16 shadow-[0_0_0_2px_rgba(6,182,212,0.24)]"
+                                : "border border-emerald-600/70 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(5,150,105,0.16)]"
                           }`}
                           style={{
                             height: `${height}%`,
@@ -410,15 +494,22 @@ export function PdfPreviewViewer({
                             width: `${width}%`,
                           }}
                           title={`${candidate.kind}: ${candidate.match_text}`}
+                          disabled={hideBoxOnly}
                           onPointerDown={(event) => {
                             if (event.button !== 0) {
+                              return;
+                            }
+                            event.stopPropagation();
+                            const containerElement =
+                              event.currentTarget.parentElement;
+                            if (!containerElement) {
                               return;
                             }
                             onCandidateSelect(index);
                             interactionRef.current = {
                               candidateIndex: index,
                               containerRect:
-                                event.currentTarget.parentElement!.getBoundingClientRect(),
+                                containerElement.getBoundingClientRect(),
                               hasChanged: false,
                               mode: "move",
                               page,
@@ -432,35 +523,72 @@ export function PdfPreviewViewer({
                           <span
                             className="pointer-events-none absolute inset-0 overflow-hidden px-1 py-0.5 leading-tight text-zinc-800/90"
                             style={{
+                              fontFamily: OVERLAY_FONT_FAMILY,
                               fontSize: `${overlayFontSize}px`,
                             }}
                           >
                             {candidate.value?.trim() ? candidate.value : ""}
                           </span>
-                          <span
-                            className="absolute right-0 bottom-0 h-2.5 w-2.5 cursor-se-resize rounded-tl-sm bg-white/65"
+                          <ResizeHandle
+                            hidden={hideBoxOnly || !isActive}
+                            direction="nw"
                             onPointerDown={(event) => {
-                              if (event.button !== 0) {
-                                return;
-                              }
-                              event.stopPropagation();
-                              onCandidateSelect(index);
-                              interactionRef.current = {
+                              beginResizeInteraction({
+                                event,
                                 candidateIndex: index,
-                                containerRect:
-                                  event.currentTarget.parentElement!.parentElement!.getBoundingClientRect(),
-                                hasChanged: false,
-                                mode: "resize",
+                                direction: "nw",
+                                onCandidateSelect,
+                                interactionRef,
                                 page,
                                 startBbox: candidate.bbox,
-                                startX: event.clientX,
-                                startY: event.clientY,
-                              };
-                              event.preventDefault();
+                              });
                             }}
-                          >
-                            <span className="absolute right-0 bottom-0 h-1.5 w-1.5 rounded-tl border-l border-t border-cyan-600/80" />
-                          </span>
+                          />
+                          <ResizeHandle
+                            hidden={hideBoxOnly || !isActive}
+                            direction="ne"
+                            onPointerDown={(event) => {
+                              beginResizeInteraction({
+                                event,
+                                candidateIndex: index,
+                                direction: "ne",
+                                onCandidateSelect,
+                                interactionRef,
+                                page,
+                                startBbox: candidate.bbox,
+                              });
+                            }}
+                          />
+                          <ResizeHandle
+                            hidden={hideBoxOnly || !isActive}
+                            direction="sw"
+                            onPointerDown={(event) => {
+                              beginResizeInteraction({
+                                event,
+                                candidateIndex: index,
+                                direction: "sw",
+                                onCandidateSelect,
+                                interactionRef,
+                                page,
+                                startBbox: candidate.bbox,
+                              });
+                            }}
+                          />
+                          <ResizeHandle
+                            hidden={hideBoxOnly || !isActive}
+                            direction="se"
+                            onPointerDown={(event) => {
+                              beginResizeInteraction({
+                                event,
+                                candidateIndex: index,
+                                direction: "se",
+                                onCandidateSelect,
+                                interactionRef,
+                                page,
+                                startBbox: candidate.bbox,
+                              });
+                            }}
+                          />
                         </button>
                       );
                     })}
@@ -477,6 +605,106 @@ export function PdfPreviewViewer({
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function beginResizeInteraction({
+  event,
+  candidateIndex,
+  direction,
+  onCandidateSelect,
+  interactionRef,
+  page,
+  startBbox,
+}: {
+  event: ReactPointerEvent<HTMLSpanElement>;
+  candidateIndex: number;
+  direction: ResizeHandle;
+  onCandidateSelect: (candidateIndex: number | null) => void;
+  interactionRef: RefObject<ActiveInteraction | null>;
+  page: RenderedPage;
+  startBbox: PdfFieldCandidate["bbox"];
+}) {
+  if (event.button !== 0) {
+    return;
+  }
+  event.stopPropagation();
+  const pageContainer = event.currentTarget.parentElement?.parentElement;
+  if (!pageContainer) {
+    return;
+  }
+  onCandidateSelect(candidateIndex);
+  interactionRef.current = {
+    candidateIndex,
+    containerRect: pageContainer.getBoundingClientRect(),
+    hasChanged: false,
+    mode: "resize",
+    handle: direction,
+    page,
+    startBbox,
+    startX: event.clientX,
+    startY: event.clientY,
+  };
+  event.preventDefault();
+}
+
+function resizeBboxFromHandle({
+  handle,
+  page,
+  startBbox,
+  deltaX,
+  deltaY,
+}: {
+  handle: ResizeHandle;
+  page: RenderedPage;
+  startBbox: PdfFieldCandidate["bbox"];
+  deltaX: number;
+  deltaY: number;
+}): PdfFieldCandidate["bbox"] {
+  const [x1, y1, x2, y2] = startBbox;
+  let nextX1 = x1;
+  let nextY1 = y1;
+  let nextX2 = x2;
+  let nextY2 = y2;
+
+  if (handle === "nw" || handle === "sw") {
+    nextX1 = clamp(x1 + deltaX, 0, x2 - MIN_BOX_SIZE);
+  }
+  if (handle === "ne" || handle === "se") {
+    nextX2 = clamp(x2 + deltaX, x1 + MIN_BOX_SIZE, page.pdfWidth);
+  }
+  if (handle === "nw" || handle === "ne") {
+    nextY1 = clamp(y1 + deltaY, 0, y2 - MIN_BOX_SIZE);
+  }
+  if (handle === "sw" || handle === "se") {
+    nextY2 = clamp(y2 + deltaY, y1 + MIN_BOX_SIZE, page.pdfHeight);
+  }
+
+  return [nextX1, nextY1, nextX2, nextY2];
+}
+
+function ResizeHandle({
+  direction,
+  hidden,
+  onPointerDown,
+}: {
+  direction: ResizeHandle;
+  hidden: boolean;
+  onPointerDown: (event: ReactPointerEvent<HTMLSpanElement>) => void;
+}) {
+  const classesByDirection: Record<ResizeHandle, string> = {
+    nw: "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize",
+    ne: "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize",
+    sw: "left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize",
+    se: "right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize",
+  };
+
+  return (
+    <span
+      className={`absolute h-2 w-2 rounded-full border border-white bg-cyan-600 shadow-sm ${classesByDirection[direction]}`}
+      style={{ display: hidden ? "none" : undefined }}
+      onPointerDown={onPointerDown}
+    />
+  );
 }
 
 function createCandidateAtViewerCenter({

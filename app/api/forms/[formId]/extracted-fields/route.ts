@@ -1,14 +1,15 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-
+import {
+  backendFetchFromSession,
+  backendFetchWithAccessToken,
+} from "@/lib/api/server";
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_COOKIE_MAX_AGE_SECONDS,
   REFRESH_TOKEN_COOKIE,
   SESSION_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/auth/constants";
-import { backendFetchFromSession } from "@/lib/api/server";
-import { backendFetchWithAccessToken } from "@/lib/api/server";
 import { refreshSession } from "@/lib/auth/server";
 
 type Params = {
@@ -17,7 +18,10 @@ type Params = {
   }>;
 };
 
-export async function PUT(request: Request, context: Params): Promise<Response> {
+export async function PUT(
+  request: Request,
+  context: Params,
+): Promise<Response> {
   const { formId } = await context.params;
   const normalizedFormId = formId.trim();
 
@@ -31,7 +35,8 @@ export async function PUT(request: Request, context: Params): Promise<Response> 
     {
       body,
       headers: {
-        "Content-Type": request.headers.get("content-type") ?? "application/json",
+        "Content-Type":
+          request.headers.get("content-type") ?? "application/json",
       },
       method: "PUT",
     },
@@ -46,9 +51,9 @@ export async function DELETE(
 ): Promise<Response> {
   const { formId } = await context.params;
   const normalizedFormId = formId.trim();
-  const requestBody = (await request.json().catch(() => null)) as
-    | { candidateIndex?: number }
-    | null;
+  const requestBody = (await request.json().catch(() => null)) as {
+    candidateIndex?: number;
+  } | null;
   const candidateIndex = requestBody?.candidateIndex;
 
   if (!normalizedFormId) {
@@ -76,18 +81,19 @@ export async function DELETE(
   return toClientResponse(forwarded);
 }
 
-export async function PATCH(request: Request, context: Params): Promise<Response> {
+export async function PATCH(
+  request: Request,
+  context: Params,
+): Promise<Response> {
   const { formId } = await context.params;
   const normalizedFormId = formId.trim();
-  const requestBody = (await request.json().catch(() => null)) as
-    | {
-        candidateIndex?: number;
-        label?: string;
-        name?: string;
-        rule?: string;
-        value?: string;
-      }
-    | null;
+  const requestBody = (await request.json().catch(() => null)) as {
+    candidateIndex?: number;
+    label?: string;
+    name?: string;
+    rule?: string;
+    value?: string;
+  } | null;
   const candidateIndex = requestBody?.candidateIndex;
   const label = requestBody?.label;
   const name = requestBody?.name;
@@ -110,19 +116,31 @@ export async function PATCH(request: Request, context: Params): Promise<Response
   }
 
   if (typeof label !== "string") {
-    return Response.json({ detail: "Invalid extracted field label." }, { status: 400 });
+    return Response.json(
+      { detail: "Invalid extracted field label." },
+      { status: 400 },
+    );
   }
 
   if (typeof name !== "string") {
-    return Response.json({ detail: "Invalid extracted field name." }, { status: 400 });
+    return Response.json(
+      { detail: "Invalid extracted field name." },
+      { status: 400 },
+    );
   }
 
   if (typeof rule !== "string") {
-    return Response.json({ detail: "Invalid extracted field rule." }, { status: 400 });
+    return Response.json(
+      { detail: "Invalid extracted field rule." },
+      { status: 400 },
+    );
   }
 
   if (typeof value !== "string") {
-    return Response.json({ detail: "Invalid extracted field value." }, { status: 400 });
+    return Response.json(
+      { detail: "Invalid extracted field value." },
+      { status: 400 },
+    );
   }
 
   const forwarded = await fetchWithSessionRefresh(
@@ -140,13 +158,11 @@ export async function PATCH(request: Request, context: Params): Promise<Response
 }
 
 type ForwardedResponse = {
-  refreshedSession:
-    | {
-        accessToken: string;
-        refreshToken: string;
-        expiresIn: number;
-      }
-    | null;
+  refreshedSession: {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+  } | null;
   response: Response;
 };
 
@@ -167,7 +183,11 @@ async function fetchWithSessionRefresh(
 
   try {
     const refreshedSession = await refreshSession(refreshToken);
-    response = await backendFetchWithAccessToken(path, refreshedSession.access_token, init);
+    response = await backendFetchWithAccessToken(
+      path,
+      refreshedSession.access_token,
+      init,
+    );
     return {
       refreshedSession: {
         accessToken: refreshedSession.access_token,
@@ -186,7 +206,8 @@ async function toClientResponse({
   refreshedSession,
 }: ForwardedResponse): Promise<Response> {
   const text = await response.text();
-  const contentType = response.headers.get("content-type") ?? "application/json";
+  const contentType =
+    response.headers.get("content-type") ?? "application/json";
   const clientResponse = new NextResponse(text, {
     status: response.status,
     headers: {
@@ -196,20 +217,31 @@ async function toClientResponse({
 
   if (refreshedSession) {
     const isSecureCookie = process.env.NODE_ENV === "production";
-    clientResponse.cookies.set(ACCESS_TOKEN_COOKIE, refreshedSession.accessToken, {
-      httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "lax",
-      path: "/",
-      maxAge: Math.min(refreshedSession.expiresIn, SESSION_COOKIE_MAX_AGE_SECONDS),
-    });
-    clientResponse.cookies.set(REFRESH_TOKEN_COOKIE, refreshedSession.refreshToken, {
-      httpOnly: true,
-      secure: isSecureCookie,
-      sameSite: "lax",
-      path: "/",
-      maxAge: REFRESH_COOKIE_MAX_AGE_SECONDS,
-    });
+    clientResponse.cookies.set(
+      ACCESS_TOKEN_COOKIE,
+      refreshedSession.accessToken,
+      {
+        httpOnly: true,
+        secure: isSecureCookie,
+        sameSite: "lax",
+        path: "/",
+        maxAge: Math.min(
+          refreshedSession.expiresIn,
+          SESSION_COOKIE_MAX_AGE_SECONDS,
+        ),
+      },
+    );
+    clientResponse.cookies.set(
+      REFRESH_TOKEN_COOKIE,
+      refreshedSession.refreshToken,
+      {
+        httpOnly: true,
+        secure: isSecureCookie,
+        sameSite: "lax",
+        path: "/",
+        maxAge: REFRESH_COOKIE_MAX_AGE_SECONDS,
+      },
+    );
   }
 
   return clientResponse;

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { createFormProcessAction } from "@/app/(workspace)/form-processes/_actions/form-processes";
 import { CreateFormProcessSubmitButton } from "@/app/(workspace)/form-processes/_components/create-form-process-submit-button";
-import { Badge } from "@/components/ui/badge";
+import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,9 +21,7 @@ type CreateFormProcessFormProps = {
   forms: FormOption[];
 };
 
-export function CreateFormProcessForm({
-  forms,
-}: CreateFormProcessFormProps) {
+export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
   const [title, setTitle] = useState("");
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -152,14 +150,15 @@ export function CreateFormProcessForm({
           {selectedForms.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {selectedForms.map((form) => (
-                <Badge
+                <Pill
                   key={form.id}
+                  value={form.name}
+                  titleCase={false}
                   variant="secondary"
-                  className="gap-1 rounded-full bg-zinc-100 px-3 py-1 text-zinc-700"
+                  className="gap-1 bg-zinc-100 text-zinc-700"
                   title={form.description || undefined}
                 >
                   <input type="hidden" name="form_ids" value={form.id} />
-                  <span>{form.name}</span>
                   <button
                     type="button"
                     className="rounded-full text-zinc-500 hover:text-zinc-900"
@@ -168,7 +167,7 @@ export function CreateFormProcessForm({
                   >
                     <X className="size-3" />
                   </button>
-                </Badge>
+                </Pill>
               ))}
             </div>
           ) : null}

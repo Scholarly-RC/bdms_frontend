@@ -31,12 +31,7 @@ export type FormProcessRead = {
   id: string;
   title: string;
   context: string;
-  status:
-    | "queued"
-    | "filling"
-    | "ready_for_review"
-    | "failed"
-    | "finalized";
+  status: "queued" | "filling" | "ready_for_review" | "failed" | "finalized";
   created_by: string;
   updated_by: string | null;
   created_at: string;

@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   Eye,
   EyeOff,
   FileText,
@@ -12,20 +13,19 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  FormProcessFormRead,
+  FormProcessRead,
+} from "@/app/(workspace)/form-processes/_lib/types";
+import { CandidatePdfViewer } from "@/app/(workspace)/forms/_components/candidate-pdf-viewer";
 import type {
   PdfFieldCandidate,
   PdfFieldParseResult,
   SaveState,
 } from "@/app/(workspace)/forms/_lib/types";
-import type {
-  FormProcessFormRead,
-  FormProcessRead,
-} from "@/app/(workspace)/form-processes/_lib/types";
-import { PdfPreviewViewer } from "@/app/(workspace)/forms/[formId]/preview/_components/pdf-preview-viewer";
-import { Badge } from "@/components/ui/badge";
+import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useDebouncedCallback } from "@/lib/hooks/use-debounced-callback";
 
 type FormProcessReviewEditorProps = {
   process: FormProcessRead;
@@ -47,6 +48,7 @@ const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>([
   "queued",
   "filling",
 ]);
+const POSITION_SAVE_DEBOUNCE_MS = 350;
 
 export function FormProcessReviewEditor({
   process,
@@ -80,16 +82,13 @@ export function FormProcessReviewEditor({
   const [pendingRule, setPendingRule] = useState("");
   const [pendingValue, setPendingValue] = useState("");
   const [isSubmittingFieldEdit, setIsSubmittingFieldEdit] = useState(false);
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isUpdatingProcessStatus, setIsUpdatingProcessStatus] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detectedFieldsListRef = useRef<HTMLDivElement | null>(null);
   const isEditable = process.status === "ready_for_review";
   const isFinalized = process.status === "finalized";
-  const filledCount = candidates.filter(
-    (candidate) => candidate.value.trim().length > 0,
-  ).length;
-  const emptyCount = candidates.length - filledCount;
+  const finalizedFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file`;
 
   useEffect(() => {
     if (!POLLABLE_STATUSES.has(process.status)) {
@@ -120,7 +119,7 @@ export function FormProcessReviewEditor({
 
   useEffect(() => {
     setActiveCandidateIndex(null);
-  }, [processForm.id]);
+  }, []);
 
   useEffect(() => {
     if (activeCandidateIndex === null) {
@@ -137,6 +136,14 @@ export function FormProcessReviewEditor({
       block: "nearest",
     });
   }, [activeCandidateIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function savePayload(nextCandidates: PdfFieldCandidate[]) {
     setSaveState("saving");
@@ -163,6 +170,15 @@ export function FormProcessReviewEditor({
 
     markSaved();
   }
+
+  const { run: queuePositionSave } = useDebouncedCallback<PdfFieldCandidate[]>(
+    (nextCandidates) => {
+      void savePayload(nextCandidates).catch(() => {
+        setSaveState("error");
+      });
+    },
+    POSITION_SAVE_DEBOUNCE_MS,
+  );
 
   function markSaved() {
     setSaveState("saved");
@@ -246,13 +262,15 @@ export function FormProcessReviewEditor({
     }
   }
 
-  async function handleFinalize() {
-    setIsFinalizing(true);
+  async function handleProcessStatusChange(
+    nextStatus: "finalized" | "ready_for_review",
+  ) {
+    setIsUpdatingProcessStatus(true);
     try {
       const response = await fetch(
         `/api/processes/${encodeURIComponent(process.id)}`,
         {
-          body: JSON.stringify({ status: "finalized" }),
+          body: JSON.stringify({ status: nextStatus }),
           headers: {
             "Content-Type": "application/json",
           },
@@ -261,12 +279,12 @@ export function FormProcessReviewEditor({
       );
 
       if (!response.ok) {
-        throw new Error("Unable to finalize form process.");
+        throw new Error("Unable to update form process status.");
       }
 
       router.refresh();
     } finally {
-      setIsFinalizing(false);
+      setIsUpdatingProcessStatus(false);
     }
   }
 
@@ -286,25 +304,10 @@ export function FormProcessReviewEditor({
                 {process.current_job.status.replaceAll("_", " ")}
               </div>
             ) : null}
-            {!isEditable ? (
+            {!isEditable && !isFinalized ? (
               <p className="text-sm text-zinc-500">
-                {isFinalized
-                  ? "This process is finalized and read-only."
-                  : "Field editing unlocks once the process reaches Ready for review."}
+                Field editing unlocks once the process reaches Ready for review.
               </p>
-            ) : null}
-            {isFinalized ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <SummaryCard
-                  label="Total fields"
-                  value={String(candidates.length)}
-                />
-                <SummaryCard
-                  label="Filled values"
-                  value={String(filledCount)}
-                />
-                <SummaryCard label="Empty values" value={String(emptyCount)} />
-              </div>
             ) : null}
             <div className="flex items-center justify-between gap-2 overflow-x-auto">
               <div className="flex shrink-0 items-center gap-2">
@@ -316,15 +319,24 @@ export function FormProcessReviewEditor({
                   type="button"
                   size="sm"
                   className="h-8 px-2.5"
-                  disabled={!isEditable || isFinalizing}
+                  disabled={
+                    isUpdatingProcessStatus || (!isEditable && !isFinalized)
+                  }
                   onClick={() => {
-                    void handleFinalize();
+                    void handleProcessStatusChange(
+                      isFinalized ? "ready_for_review" : "finalized",
+                    );
                   }}
                 >
-                  {isFinalizing ? (
+                  {isUpdatingProcessStatus ? (
                     <>
                       <LoaderCircle className="size-4 animate-spin" />
-                      Finalizing...
+                      Saving...
+                    </>
+                  ) : isFinalized ? (
+                    <>
+                      <Pencil className="size-4" />
+                      Revert to review
                     </>
                   ) : (
                     <>
@@ -333,22 +345,24 @@ export function FormProcessReviewEditor({
                     </>
                   )}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5"
-                  onClick={() => {
-                    setIsPreviewMode((current) => !current);
-                  }}
-                >
-                  {isPreviewMode ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                  Preview
-                </Button>
+                {isEditable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5"
+                    onClick={() => {
+                      setIsPreviewMode((current) => !current);
+                    }}
+                  >
+                    {isPreviewMode ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                    Preview
+                  </Button>
+                ) : null}
                 {POLLABLE_STATUSES.has(process.status) ? (
                   <Button
                     type="button"
@@ -361,6 +375,20 @@ export function FormProcessReviewEditor({
                   >
                     <RefreshCw className="size-4" />
                     Refresh
+                  </Button>
+                ) : null}
+                {isFinalized ? (
+                  <Button
+                    asChild
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5"
+                  >
+                    <a href={finalizedFileUrl}>
+                      <Download className="size-4" />
+                      Download
+                    </a>
                   </Button>
                 ) : null}
                 <Button
@@ -378,35 +406,15 @@ export function FormProcessReviewEditor({
               </div>
             </div>
 
-            <PdfPreviewViewer
+            <CandidatePdfViewer
               activeCandidateIndex={activeCandidateIndex}
               candidates={candidates}
               createCandidateRequest={0}
               fileUrl={`/api/forms/${encodeURIComponent(processForm.source_form_id)}/file`}
-              showBboxes={!isPreviewMode}
-              onCandidateChange={(candidateIndex, nextBbox) => {
-                if (!isEditable) {
-                  return;
-                }
-                setCandidates((current) =>
-                  current.map((candidate, index) =>
-                    index === candidateIndex
-                      ? { ...candidate, bbox: nextBbox }
-                      : candidate,
-                  ),
-                );
-              }}
-              onCandidateCommit={() => {
-                if (!isEditable) {
-                  return;
-                }
-                void savePayload(candidates).catch(() => {
-                  setSaveState("error");
-                });
-              }}
-              onCandidateCreate={() => {
-                // Process review mode does not create new fields.
-              }}
+              isEditable={isEditable}
+              onCommitCandidates={queuePositionSave}
+              onSetCandidates={setCandidates}
+              showBboxes={!isFinalized && !isPreviewMode}
               onCandidateSelect={(candidateIndex) => {
                 setActiveCandidateIndex(candidateIndex);
               }}
@@ -438,48 +446,51 @@ export function FormProcessReviewEditor({
                         ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-200"
                         : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
                     }`}
-                    onClick={() => {
-                      setActiveCandidateIndex((current) =>
-                        current === index ? null : index,
-                      );
-                    }}
                   >
-                    {normalizeCandidateText(candidate.rule) ? (
-                      <span
-                        className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
-                        title="This field has a custom rule."
-                      >
-                        <AlertCircle className="size-3.5" />
-                      </span>
-                    ) : null}
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <div className="pr-10 text-left">
-                        <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                          Name
-                        </p>
-                        <p className="truncate text-sm font-medium text-zinc-900">
-                          {getCandidateDisplayName(candidate)}
-                        </p>
+                    <button
+                      type="button"
+                      className="block w-full text-left"
+                      onClick={() => {
+                        setActiveCandidateIndex((current) =>
+                          current === index ? null : index,
+                        );
+                      }}
+                    >
+                      {normalizeCandidateText(candidate.rule) ? (
+                        <span
+                          className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
+                          title="This field has a custom rule."
+                        >
+                          <AlertCircle className="size-3.5" />
+                        </span>
+                      ) : null}
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <div className="pr-10 text-left">
+                          <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
+                            Name
+                          </p>
+                          <p className="truncate text-sm font-medium text-zinc-900">
+                            {getCandidateDisplayName(candidate)}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
+                            Value
+                          </p>
+                          <p className="text-sm text-zinc-700">
+                            {candidate.value?.trim() ? (
+                              candidate.value
+                            ) : (
+                              <span className="text-zinc-400">No value</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                          Value
-                        </p>
-                        <p className="text-sm text-zinc-700">
-                          {candidate.value?.trim() ? (
-                            candidate.value
-                          ) : (
-                            <span className="text-zinc-400">No value</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
+                    </button>
                     {isActive && isEditable ? (
-                      <div
+                      <span
                         className="absolute right-3 bottom-3 flex items-center gap-1"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                        }}
+                        aria-hidden="true"
                       >
                         <Button
                           type="button"
@@ -508,7 +519,7 @@ export function FormProcessReviewEditor({
                         >
                           <Trash2 className="size-4" />
                         </Button>
-                      </div>
+                      </span>
                     ) : null}
                   </div>
                 );
@@ -769,48 +780,42 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
   }
   if (saveState === "saving") {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600">
-        <LoaderCircle className="size-3.5 animate-spin" />
-        Saving...
-      </div>
+      <Pill
+        value="saving"
+        icon={<LoaderCircle className="size-3.5 animate-spin" />}
+        variant="outline"
+        className="border-zinc-300 bg-white py-1.5 text-zinc-600"
+      />
     );
   }
   if (saveState === "saved") {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
-        <CheckCircle2 className="size-3.5" />
-        Saved
-      </div>
+      <Pill
+        value="saved"
+        icon={<CheckCircle2 className="size-3.5" />}
+        variant="outline"
+        className="border-emerald-300 bg-emerald-50 py-1.5 text-emerald-700"
+      />
     );
   }
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
-      <TriangleAlert className="size-3.5" />
-      Save failed
-    </div>
+    <Pill
+      value="save_failed"
+      icon={<TriangleAlert className="size-3.5" />}
+      variant="outline"
+      className="border-amber-300 bg-amber-50 py-1.5 text-amber-800"
+    />
   );
 }
 
 function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
   return (
-    <Badge
+    <Pill
+      value={status}
+      normalizeValue
+      titleCase
       variant="secondary"
-      className="rounded-full bg-zinc-100 text-zinc-700"
-    >
-      {status === "ready_for_review"
-        ? "Ready for review"
-        : status.replaceAll("_", " ")}
-    </Badge>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-      <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-semibold text-zinc-950">{value}</p>
-    </div>
+      className="bg-zinc-100 text-zinc-700"
+    />
   );
 }

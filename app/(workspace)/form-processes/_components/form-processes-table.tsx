@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { DeleteFormProcessButton } from "@/app/(workspace)/form-processes/_components/delete-form-process-button";
 import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
-import { Badge } from "@/components/ui/badge";
+import { formatPillValue, Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -73,7 +73,8 @@ export function FormProcessesTable({ processes }: FormProcessesTableProps) {
                 <div className="space-y-0.5">
                   <p className="font-medium text-zinc-900">{process.title}</p>
                   <p className="text-sm text-zinc-500">
-                    {formatShortProcessId(process.id)} · {process.forms.length} child form
+                    {formatShortProcessId(process.id)} · {process.forms.length}{" "}
+                    child form
                     {process.forms.length === 1 ? "" : "s"}
                   </p>
                 </div>
@@ -147,11 +148,6 @@ export function FormProcessesTable({ processes }: FormProcessesTableProps) {
 }
 
 function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
-  const label =
-    status === "ready_for_review"
-      ? "Ready for review"
-      : status.replaceAll("_", " ");
-
   const styles =
     status === "finalized"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -162,12 +158,13 @@ function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
           : "border-amber-200 bg-amber-50 text-amber-700";
 
   return (
-    <Badge
+    <Pill
+      value={status}
+      normalizeValue
+      titleCase
       variant="outline"
-      className={`rounded-full border px-3 py-1 ${styles}`}
-    >
-      {label}
-    </Badge>
+      className={styles}
+    />
   );
 }
 
@@ -196,7 +193,9 @@ function formatJobStatus(
       : never
     : never,
 ): string {
-  return typeof status === "string" ? status.replaceAll("_", " ") : "";
+  return typeof status === "string"
+    ? formatPillValue(status, { normalizeValue: true, titleCase: true })
+    : "";
 }
 
 function formatProcessName(process: FormProcessRead): string {

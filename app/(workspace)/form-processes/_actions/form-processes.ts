@@ -84,7 +84,9 @@ function getDeleteErrorMessage(status: number, detail?: string): string {
   return "Unable to delete form process.";
 }
 
-export async function deleteFormProcessAction(processId: string): Promise<void> {
+export async function deleteFormProcessAction(
+  processId: string,
+): Promise<void> {
   const parsed = deleteFormProcessSchema.safeParse({ processId });
   if (!parsed.success) {
     redirect("/form-processes?error=Invalid%20form%20process%20id.");
