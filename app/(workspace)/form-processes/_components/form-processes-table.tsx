@@ -70,14 +70,7 @@ export function FormProcessesTable({ processes }: FormProcessesTableProps) {
               className="border-zinc-200/70 align-middle transition-colors hover:bg-zinc-50/70"
             >
               <TableCell className="pl-6 py-4 align-middle">
-                <div className="space-y-0.5">
-                  <p className="font-medium text-zinc-900">{process.title}</p>
-                  <p className="text-sm text-zinc-500">
-                    {formatShortProcessId(process.id)} · {process.forms.length}{" "}
-                    child form
-                    {process.forms.length === 1 ? "" : "s"}
-                  </p>
-                </div>
+                <p className="font-medium text-zinc-900">{process.title}</p>
               </TableCell>
               <TableCell className="py-4 align-middle">
                 <div className="space-y-2">
@@ -200,8 +193,4 @@ function formatJobStatus(
 
 function formatProcessName(process: FormProcessRead): string {
   return `"${process.title}"`;
-}
-
-function formatShortProcessId(processId: string): string {
-  return `#${processId.slice(0, 8)}`;
 }

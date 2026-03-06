@@ -1,8 +1,17 @@
-import { CalendarRange, Clock3, Layers } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  FileStack,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
+import Link from "next/link";
+import type { ReactNode } from "react";
 
-import { DashboardAlertsButton } from "@/components/shared/dashboard-alerts-button";
+import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
+import type { FormRead } from "@/app/(workspace)/forms/_lib/types";
 import { Pill } from "@/components/shared/pill";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,103 +19,298 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { backendFetchFromSession } from "@/lib/api/server";
 
-const quickStats = [
-  { label: "Open cases", value: "48", change: "+6 today" },
-  { label: "Resolved", value: "132", change: "+18 this week" },
-  { label: "SLA health", value: "96%", change: "On target" },
-];
+async function fetchForms(): Promise<FormRead[]> {
+  const response = await backendFetchFromSession("/forms", { method: "GET" });
+  if (!response.ok) {
+    throw new Error("Unable to load forms.");
+  }
 
-const pipeline = [
-  { team: "Onboarding", progress: 84 },
-  { team: "Compliance", progress: 67 },
-  { team: "Support", progress: 91 },
-];
+  return (await response.json()) as FormRead[];
+}
 
-export default function DashboardPage() {
+async function fetchFormProcesses(): Promise<FormProcessRead[]> {
+  const response = await backendFetchFromSession("/processes", {
+    method: "GET",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to load form processes.");
+  }
+
+  return (await response.json()) as FormProcessRead[];
+}
+
+export default async function DashboardPage() {
+  const [forms, processes] = await Promise.all([
+    fetchForms(),
+    fetchFormProcesses(),
+  ]);
+
+  const formsReady = forms.filter(
+    (form) => form.extracted_fields_count > 0,
+  ).length;
+  const totalProcessForms = processes.reduce(
+    (count, process) => count + process.forms.length,
+    0,
+  );
+  const reviewCount = processes.filter(
+    (process) => process.status === "ready_for_review",
+  ).length;
+  const inProgressCount = processes.filter(
+    (process) => process.status === "queued" || process.status === "filling",
+  ).length;
+  const finalizedCount = processes.filter(
+    (process) => process.status === "finalized",
+  ).length;
+  const failedCount = processes.filter(
+    (process) => process.status === "failed",
+  ).length;
+
+  const latestProcesses = [...processes]
+    .sort(
+      (left, right) =>
+        new Date(right.updated_at).getTime() -
+        new Date(left.updated_at).getTime(),
+    )
+    .slice(0, 5);
+
+  const processStatusRows: Array<{
+    label: string;
+    count: number;
+    tone: string;
+  }> = [
+    {
+      label: "Queued or filling",
+      count: inProgressCount,
+      tone: "border-amber-200 bg-amber-50 text-amber-700",
+    },
+    {
+      label: "Ready for review",
+      count: reviewCount,
+      tone: "border-sky-200 bg-sky-50 text-sky-700",
+    },
+    {
+      label: "Finalized",
+      count: finalizedCount,
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    },
+    {
+      label: "Failed",
+      count: failedCount,
+      tone: "border-red-200 bg-red-50 text-red-700",
+    },
+  ];
+
   return (
-    <>
-      <header className="rounded-2xl border border-zinc-300/70 bg-white/82 p-4 shadow-sm backdrop-blur-sm sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-zinc-500">Sunday briefing</p>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
-              Dashboard Overview
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <DashboardAlertsButton />
-            <Avatar>
-              <AvatarFallback>SA</AvatarFallback>
-            </Avatar>
-          </div>
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
+            Dashboard
+          </h1>
+          <p className="text-sm text-zinc-500">
+            Live intake, process, and review counts from the current workspace.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" className="rounded-lg">
+            <Link href="/forms">Manage forms</Link>
+          </Button>
+          <Button asChild className="rounded-lg">
+            <Link href="/form-processes/new">Create process</Link>
+          </Button>
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {quickStats.map((stat) => (
-          <Card
-            key={stat.label}
-            className="border-zinc-300/70 bg-white/82 py-4 backdrop-blur-sm"
-          >
-            <CardContent className="space-y-1 px-4">
-              <p className="text-sm text-zinc-600">{stat.label}</p>
-              <p className="text-3xl font-semibold text-zinc-950">
-                {stat.value}
-              </p>
-              <p className="text-xs text-zinc-500">{stat.change}</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Form templates"
+          value={forms.length}
+          detail={`${formsReady} ready with extracted fields`}
+          icon={<FileStack className="size-5" />}
+        />
+        <StatCard
+          title="Forms copied into processes"
+          value={totalProcessForms}
+          detail={`${processes.length} total process run${processes.length === 1 ? "" : "s"}`}
+          icon={<ClipboardList className="size-5" />}
+        />
+        <StatCard
+          title="Needs review"
+          value={reviewCount}
+          detail="Processes waiting for manual review"
+          icon={<LoaderCircle className="size-5" />}
+        />
+        <StatCard
+          title="Finalized"
+          value={finalizedCount}
+          detail={
+            failedCount > 0
+              ? `${failedCount} failed process${failedCount === 1 ? "" : "es"} need attention`
+              : "No failed processes right now"
+          }
+          icon={<CheckCircle2 className="size-5" />}
+        />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Layers className="size-5" /> Team pipeline
-            </CardTitle>
+            <CardTitle className="text-xl">Process status</CardTitle>
             <CardDescription>
-              Current throughput and completion performance by team.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {pipeline.map((row) => (
-              <div key={row.team} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-zinc-800">{row.team}</span>
-                  <span className="text-zinc-500">{row.progress}%</span>
-                </div>
-                <Progress value={row.progress} className="h-2.5" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Next actions</CardTitle>
-            <CardDescription>
-              Priorities to close before the next reporting cycle.
+              Keep only the status buckets that affect operator follow-up.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <CalendarRange className="size-4" /> Monthly audit pack
+            {processStatusRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-900">
+                    {row.label}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {row.count === 0
+                      ? "Nothing pending in this bucket"
+                      : "Currently active in workspace"}
+                  </p>
+                </div>
+                <Pill
+                  value={String(row.count)}
+                  normalizeValue={false}
+                  titleCase={false}
+                  variant="outline"
+                  className={row.tone}
+                />
               </div>
-              <Pill value="due tomorrow" variant="secondary" />
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <Clock3 className="size-4" /> Incident postmortem review
+            ))}
+
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-900">
+                <TriangleAlert className="size-4 text-amber-600" />
+                Field extraction coverage
               </div>
-              <Pill value="in progress" variant="outline" />
+              <p className="text-sm text-zinc-600">
+                {formsReady} of {forms.length} form template
+                {forms.length === 1 ? "" : "s"} have extracted fields ready for
+                AI-assisted filling.
+              </p>
             </div>
           </CardContent>
         </Card>
+
+        <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="text-xl">Latest process activity</CardTitle>
+            <CardDescription>
+              Most recently updated processes and the amount of review material
+              attached.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {latestProcesses.length === 0 ? (
+              <p className="text-sm text-zinc-600">No processes found.</p>
+            ) : (
+              latestProcesses.map((process) => (
+                <div
+                  key={process.id}
+                  className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-medium text-zinc-900">
+                        {process.title}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        Updated {formatDateTime(process.updated_at)}
+                      </p>
+                    </div>
+                    <ProcessStatusPill status={process.status} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
+                    <span>
+                      {process.forms.length} attached form
+                      {process.forms.length === 1 ? "" : "s"}
+                    </span>
+                    {process.current_job ? (
+                      <span>
+                        Current job:{" "}
+                        {formatJobStatus(process.current_job.status)} at{" "}
+                        {process.current_job.progress}%
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </>
+    </div>
   );
+}
+
+function StatCard({
+  title,
+  value,
+  detail,
+  icon,
+}: {
+  title: string;
+  value: number;
+  detail: string;
+  icon: ReactNode;
+}) {
+  return (
+    <Card className="border-zinc-300/70 bg-white/82 py-4 backdrop-blur-sm">
+      <CardContent className="space-y-2 px-4">
+        <div className="flex items-center justify-between gap-3 text-zinc-500">
+          <p className="text-sm">{title}</p>
+          {icon}
+        </div>
+        <p className="text-3xl font-semibold text-zinc-950">{value}</p>
+        <p className="text-xs text-zinc-500">{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProcessStatusPill({ status }: { status: FormProcessRead["status"] }) {
+  const className =
+    status === "finalized"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : status === "ready_for_review"
+        ? "border-sky-200 bg-sky-50 text-sky-700"
+        : status === "failed"
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-amber-200 bg-amber-50 text-amber-700";
+
+  return (
+    <Pill
+      value={status}
+      normalizeValue
+      titleCase
+      variant="outline"
+      className={className}
+    />
+  );
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatJobStatus(
+  status: NonNullable<FormProcessRead["current_job"]>["status"],
+): string {
+  return status.replaceAll("_", " ");
 }

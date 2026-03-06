@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
 import { FormProcessReviewEditor } from "@/app/(workspace)/form-processes/[processId]/_components/form-process-review-editor";
 import { ProcessFormSelector } from "@/app/(workspace)/form-processes/[processId]/_components/process-form-selector";
+import type { FormRead } from "@/app/(workspace)/forms/_lib/types";
 import { Button } from "@/components/ui/button";
 import { backendFetchFromSession } from "@/lib/api/server";
 
@@ -35,15 +36,45 @@ async function fetchProcess(processId: string): Promise<FormProcessRead> {
   return (await response.json()) as FormProcessRead;
 }
 
+async function fetchForms(): Promise<FormRead[]> {
+  const response = await backendFetchFromSession("/forms", { method: "GET" });
+  if (!response.ok) {
+    throw new Error("Unable to load forms.");
+  }
+
+  return (await response.json()) as FormRead[];
+}
+
 export default async function FormProcessDetailPage({
   params,
   searchParams,
 }: PageProps) {
   const { processId } = await params;
   const { formId } = await searchParams;
-  const process = await fetchProcess(processId);
+  const [process, allForms] = await Promise.all([
+    fetchProcess(processId),
+    fetchForms(),
+  ]);
   const processForm =
     process.forms.find((form) => form.id === formId) ?? process.forms[0];
+  const selectorOptions = process.forms.map((form) => ({
+    id: form.id,
+    name: form.name,
+    description: form.description,
+    sourceFormId: form.source_form_id,
+  }));
+  const availableBaseForms = allForms
+    .filter(
+      (form) =>
+        !process.forms.some(
+          (processFormItem) => processFormItem.source_form_id === form.id,
+        ),
+    )
+    .map((form) => ({
+      id: form.id,
+      name: form.name,
+      description: form.description,
+    }));
 
   if (!processForm) {
     notFound();
@@ -64,18 +95,20 @@ export default async function FormProcessDetailPage({
           ) : null}
         </div>
         <div className="flex flex-wrap items-end justify-end gap-2">
-          {process.forms.length > 1 ? (
-            <div className="space-y-1">
-              <ProcessFormSelector
-                options={process.forms.map((form) => ({
-                  id: form.id,
-                  name: form.name,
-                }))}
-                selectedFormId={processForm.id}
-              />
-            </div>
+          {selectorOptions.length > 1 || availableBaseForms.length > 0 ? (
+            <ProcessFormSelector
+              processId={process.id}
+              options={selectorOptions}
+              selectedFormId={processForm.id}
+              availableBaseForms={availableBaseForms}
+              isProcessLocked={process.status === "finalized"}
+            />
           ) : null}
-          <Button asChild variant="outline" className="rounded-lg">
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 rounded-lg px-3 text-sm"
+          >
             <Link href="/form-processes">Back to processes</Link>
           </Button>
         </div>

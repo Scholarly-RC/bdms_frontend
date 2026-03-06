@@ -45,3 +45,8 @@ export const deleteFormSchema = z.object({
 export const deleteFormProcessSchema = z.object({
   processId: z.uuid(),
 });
+
+export const addFormToProcessSchema = z.object({
+  processId: z.uuid(),
+  formId: z.uuid(),
+});

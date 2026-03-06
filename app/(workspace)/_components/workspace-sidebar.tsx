@@ -2,7 +2,6 @@
 
 import {
   ArrowRight,
-  FileCheck2,
   FileText,
   ListChecks,
   MapPinned,
@@ -20,8 +19,7 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: ArrowRight },
   { href: "/forms", label: "Forms", icon: FileText },
   { href: "/form-processes", label: "Form Processes", icon: ListChecks },
-  { href: "/logs", label: "Logs", icon: FileCheck2 },
-  { href: "/reports", label: "Reports", icon: FileCheck2 },
+  { href: "/reports", label: "Reports", icon: FileText },
 ];
 
 const adminItems = [

@@ -8,13 +8,7 @@ import {
   SESSION_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/auth/constants";
 
-const protectedPaths = [
-  "/dashboard",
-  "/forms",
-  "/form-processes",
-  "/logs",
-  "/reports",
-];
+const protectedPaths = ["/dashboard", "/forms", "/form-processes", "/reports"];
 
 function getEnv(name: string): string | undefined {
   const value = process.env[name];
@@ -189,7 +183,6 @@ export const config = {
     "/dashboard/:path*",
     "/forms/:path*",
     "/form-processes/:path*",
-    "/logs/:path*",
     "/reports/:path*",
   ],
 };

@@ -1,12 +1,11 @@
+import { BarangayPersonnelTable } from "@/app/(workspace)/barangay-profile/_components/barangay-personnel-table";
 import { BarangayProfileForm } from "@/app/(workspace)/barangay-profile/_components/barangay-profile-form";
+import type {
+  BarangayPersonnelRead,
+  BarangayProfileRead,
+} from "@/app/(workspace)/barangay-profile/_lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { backendFetchFromSession } from "@/lib/api/server";
-
-type BarangayProfileRead = {
-  province: string;
-  municipality: string;
-  barangay: string;
-};
 
 async function fetchBarangayProfile(): Promise<BarangayProfileRead> {
   const response = await backendFetchFromSession("/barangay-profile", {
@@ -24,8 +23,26 @@ async function fetchBarangayProfile(): Promise<BarangayProfileRead> {
   return payload;
 }
 
+async function fetchBarangayPersonnel(): Promise<BarangayPersonnelRead[]> {
+  const response = await backendFetchFromSession(
+    "/barangay-profile/personnel",
+    {
+      method: "GET",
+    },
+  );
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as BarangayPersonnelRead[];
+  return payload;
+}
+
 export default async function BarangayProfilePage() {
-  const profile = await fetchBarangayProfile();
+  const [profile, personnel] = await Promise.all([
+    fetchBarangayProfile(),
+    fetchBarangayPersonnel(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -44,6 +61,15 @@ export default async function BarangayProfilePage() {
         </CardHeader>
         <CardContent>
           <BarangayProfileForm profile={profile} />
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-300/70 bg-white/82 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">Personnel</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BarangayPersonnelTable initialPersonnel={personnel} />
         </CardContent>
       </Card>
     </div>
