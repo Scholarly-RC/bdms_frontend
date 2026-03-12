@@ -47,9 +47,7 @@ export default async function DashboardPage() {
     fetchFormProcesses(),
   ]);
 
-  const formsReady = forms.filter(
-    (form) => form.extracted_fields_count > 0,
-  ).length;
+  const activeForms = forms.filter((form) => form.is_active).length;
   const totalProcessForms = processes.reduce(
     (count, process) => count + process.forms.length,
     0,
@@ -127,7 +125,7 @@ export default async function DashboardPage() {
         <StatCard
           title="Form templates"
           value={forms.length}
-          detail={`${formsReady} ready with extracted fields`}
+          detail={`${activeForms} active template${activeForms === 1 ? "" : "s"}`}
           icon={<FileStack className="size-5" />}
         />
         <StatCard
@@ -191,12 +189,12 @@ export default async function DashboardPage() {
             <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-3">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-900">
                 <TriangleAlert className="size-4 text-amber-600" />
-                Field extraction coverage
+                Template availability
               </div>
               <p className="text-sm text-zinc-600">
-                {formsReady} of {forms.length} form template
-                {forms.length === 1 ? "" : "s"} have extracted fields ready for
-                AI-assisted filling.
+                {activeForms} of {forms.length} form template
+                {forms.length === 1 ? "" : "s"} are active and available for
+                process creation.
               </p>
             </div>
           </CardContent>

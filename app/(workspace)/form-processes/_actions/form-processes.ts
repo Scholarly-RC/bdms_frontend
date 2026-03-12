@@ -23,6 +23,7 @@ export async function createFormProcessAction(
 ): Promise<void> {
   const parsed = createFormProcessFormSchema.safeParse({
     title: formData.get("title"),
+    caseId: formData.get("case_id"),
     formIds: formData
       .getAll("form_ids")
       .map((value) => (typeof value === "string" ? value : ""))
@@ -36,7 +37,7 @@ export async function createFormProcessAction(
     );
   }
 
-  const { formIds, context, title } = parsed.data;
+  const { caseId, formIds, context, title } = parsed.data;
 
   const response = await backendFetchFromSession("/processes", {
     method: "POST",
@@ -45,6 +46,7 @@ export async function createFormProcessAction(
     },
     body: JSON.stringify({
       title,
+      case_id: caseId || null,
       form_ids: formIds,
       context,
     }),

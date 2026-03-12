@@ -1,5 +1,3 @@
-import type { PdfFieldParseResult } from "@/app/(workspace)/forms/_lib/types";
-
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export type ProcessJobRead = {
@@ -20,9 +18,8 @@ export type FormProcessFormRead = {
   description: string;
   storage_bucket: string;
   storage_object_path: string;
-  extracted_fields_json: PdfFieldParseResult | null;
-  extracted_fields_count: number;
-  extracted_fields_updated_at: string | null;
+  payload_json: Record<string, unknown> | null;
+  payload_updated_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +28,7 @@ export type FormProcessRead = {
   id: string;
   title: string;
   context: string;
+  case_id: string | null;
   status: "queued" | "filling" | "ready_for_review" | "failed" | "finalized";
   created_by: string;
   updated_by: string | null;

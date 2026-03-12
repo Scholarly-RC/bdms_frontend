@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { backendFetchFromSession } from "@/lib/api/server";
 import {
   createFormFormSchema,
-  deleteFormSchema,
+  updateFormStatusSchema,
 } from "@/lib/validation/form-actions";
 
 function getErrorMessage(status: number, detail?: string): string {
@@ -55,7 +55,7 @@ export async function createFormAction(formData: FormData): Promise<void> {
   redirect("/forms?success=Form%20created%20successfully.");
 }
 
-function getDeleteErrorMessage(status: number, detail?: string): string {
+function getUpdateStatusErrorMessage(status: number, detail?: string): string {
   if (detail) {
     return detail;
   }
@@ -63,19 +63,19 @@ function getDeleteErrorMessage(status: number, detail?: string): string {
     return "Session expired. Please sign in again.";
   }
   if (status === 403) {
-    return "Admin role required to delete a form.";
+    return "Admin role required to update a form.";
   }
   if (status === 404) {
     return "Form not found.";
   }
-  if (status === 409) {
-    return "Form is referenced by existing records and cannot be deleted.";
-  }
-  return "Unable to delete form.";
+  return "Unable to update form.";
 }
 
-export async function deleteFormAction(formId: string): Promise<void> {
-  const parsed = deleteFormSchema.safeParse({ formId });
+export async function updateFormStatusAction(
+  formId: string,
+  isActive: boolean,
+): Promise<void> {
+  const parsed = updateFormStatusSchema.safeParse({ formId, isActive });
   if (!parsed.success) {
     redirect("/forms?error=Invalid%20form%20id.");
   }
@@ -83,7 +83,11 @@ export async function deleteFormAction(formId: string): Promise<void> {
   const response = await backendFetchFromSession(
     `/forms/${parsed.data.formId}`,
     {
-      method: "DELETE",
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ is_active: parsed.data.isActive }),
     },
   );
 
@@ -91,9 +95,15 @@ export async function deleteFormAction(formId: string): Promise<void> {
     const payload = (await response.json().catch(() => null)) as {
       detail?: string;
     } | null;
-    const message = getDeleteErrorMessage(response.status, payload?.detail);
+    const message = getUpdateStatusErrorMessage(
+      response.status,
+      payload?.detail,
+    );
     redirect(`/forms?error=${encodeURIComponent(message)}`);
   }
 
-  redirect("/forms?success=Form%20deleted%20successfully.");
+  const message = parsed.data.isActive
+    ? "Form%20enabled%20successfully."
+    : "Form%20disabled%20successfully.";
+  redirect(`/forms?success=${message}`);
 }

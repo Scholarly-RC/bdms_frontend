@@ -19,15 +19,10 @@ type Params = {
   }>;
 };
 
-export async function GET(
-  request: Request,
-  context: Params,
-): Promise<Response> {
+export async function GET(_: Request, context: Params): Promise<Response> {
   const { processId, processFormId } = await context.params;
   const normalizedProcessId = processId.trim();
   const normalizedProcessFormId = processFormId.trim();
-  const requestUrl = new URL(request.url);
-  const format = requestUrl.searchParams.get("format")?.trim().toLowerCase();
 
   if (!normalizedProcessId || !normalizedProcessFormId) {
     return Response.json(
@@ -36,22 +31,10 @@ export async function GET(
     );
   }
 
-  if (format && format !== "pdf" && format !== "word") {
-    return Response.json(
-      { detail: "Invalid process form file format." },
-      { status: 400 },
-    );
-  }
-
-  const backendPath = new URLSearchParams();
-  if (format) {
-    backendPath.set("format", format);
-  }
-
   const forwarded = await fetchWithSessionRefresh(
     `/processes/${encodeURIComponent(normalizedProcessId)}/forms/${encodeURIComponent(
       normalizedProcessFormId,
-    )}/file${backendPath.size > 0 ? `?${backendPath.toString()}` : ""}`,
+    )}/preview-file`,
     {
       method: "GET",
     },
@@ -109,8 +92,7 @@ async function toClientResponse({
   refreshedSession,
 }: ForwardedResponse): Promise<Response> {
   const body = await response.arrayBuffer();
-  const contentType =
-    response.headers.get("content-type") ?? "application/octet-stream";
+  const contentType = response.headers.get("content-type") ?? "application/pdf";
   const contentDisposition = response.headers.get("content-disposition");
   const clientResponse = new NextResponse(body, {
     status: response.status,

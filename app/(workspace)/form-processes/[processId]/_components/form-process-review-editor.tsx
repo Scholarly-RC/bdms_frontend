@@ -1,30 +1,22 @@
 "use client";
 
 import {
-  AlertCircle,
   CheckCircle2,
   Download,
-  Eye,
-  EyeOff,
+  Expand,
   FileText,
   LoaderCircle,
   Pencil,
   RefreshCw,
-  Trash2,
-  TriangleAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import type {
   FormProcessFormRead,
   FormProcessRead,
 } from "@/app/(workspace)/form-processes/_lib/types";
-import { CandidatePdfViewer } from "@/app/(workspace)/forms/_components/candidate-pdf-viewer";
-import type {
-  PdfFieldCandidate,
-  PdfFieldParseResult,
-  SaveState,
-} from "@/app/(workspace)/forms/_lib/types";
+import { PdfPreviewViewer } from "@/app/(workspace)/form-processes/[processId]/_components/pdf-preview-viewer";
 import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,51 +36,49 @@ type FormProcessReviewEditorProps = {
   processForm: FormProcessFormRead;
 };
 
+type SaveState = "idle" | "saving" | "saved" | "error";
+
 const POLLABLE_STATUSES = new Set<FormProcessRead["status"]>([
   "queued",
   "filling",
 ]);
-const POSITION_SAVE_DEBOUNCE_MS = 350;
 
 export function FormProcessReviewEditor({
   process,
   processForm,
 }: FormProcessReviewEditorProps) {
   const router = useRouter();
-  const initialResult: PdfFieldParseResult = useMemo(
-    () =>
-      processForm.extracted_fields_json ?? {
-        candidates: [],
-        pdf_path: `${processForm.storage_bucket}/${processForm.storage_object_path}`,
-        total_candidates: 0,
-      },
-    [processForm],
+  const initialPayload = useMemo(
+    () => normalizePayload(processForm.payload_json),
+    [processForm.payload_json],
   );
-  const [activeCandidateIndex, setActiveCandidateIndex] = useState<
-    number | null
-  >(null);
-  const [candidates, setCandidates] = useState<PdfFieldCandidate[]>(
-    initialResult.candidates,
-  );
-  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(
-    null,
-  );
-  const [pendingValueEditIndex, setPendingValueEditIndex] = useState<
-    number | null
-  >(null);
-  const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [pendingLabel, setPendingLabel] = useState("");
-  const [pendingRule, setPendingRule] = useState("");
-  const [pendingValue, setPendingValue] = useState("");
-  const [isSubmittingFieldEdit, setIsSubmittingFieldEdit] = useState(false);
-  const [isUpdatingProcessStatus, setIsUpdatingProcessStatus] = useState(false);
+  const [payloadJson, setPayloadJson] =
+    useState<Record<string, unknown>>(initialPayload);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const detectedFieldsListRef = useRef<HTMLDivElement | null>(null);
+  const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isUpdatingProcessStatus, setIsUpdatingProcessStatus] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(true);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const isEditable = process.status === "ready_for_review";
   const isFinalized = process.status === "finalized";
-  const finalizedFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file`;
+  const finalizedPdfFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file?format=pdf`;
+  const finalizedWordFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file?format=word`;
+  const previewFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/preview-file?v=${previewVersion}`;
+  const fields = useMemo(
+    () => flattenPayloadFields(payloadJson),
+    [payloadJson],
+  );
+
+  useEffect(() => {
+    setPayloadJson(initialPayload);
+  }, [initialPayload]);
+
+  useEffect(() => {
+    setIsPreviewLoading(true);
+  }, []);
 
   useEffect(() => {
     if (!POLLABLE_STATUSES.has(process.status)) {
@@ -103,60 +93,33 @@ export function FormProcessReviewEditor({
     };
   }, [process.status, router]);
 
-  const sortedCandidates = useMemo(
-    () =>
-      candidates
-        .map((candidate, index) => ({ candidate, index }))
-        .sort((left, right) =>
-          compareCandidatesByPdfPosition(left.candidate, right.candidate),
-        ),
-    [candidates],
-  );
-
   useEffect(() => {
-    setCandidates(initialResult.candidates);
-  }, [initialResult]);
-
-  useEffect(() => {
-    setActiveCandidateIndex(null);
-  }, []);
-
-  useEffect(() => {
-    if (activeCandidateIndex === null) {
+    if (!isDownloadMenuOpen) {
       return;
     }
 
-    const listElement = detectedFieldsListRef.current;
-    const activeCard = listElement?.querySelector<HTMLElement>(
-      `[data-detected-field-index="${activeCandidateIndex}"]`,
-    );
-
-    activeCard?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-    });
-  }, [activeCandidateIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+    function handlePointerDown(event: MouseEvent) {
+      if (!downloadMenuRef.current) {
+        return;
       }
-    };
-  }, []);
 
-  async function savePayload(nextCandidates: PdfFieldCandidate[]) {
+      if (!downloadMenuRef.current.contains(event.target as Node)) {
+        setIsDownloadMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isDownloadMenuOpen]);
+
+  async function persistPayload(nextPayload: Record<string, unknown>) {
     setSaveState("saving");
-    const payload: PdfFieldParseResult = {
-      ...initialResult,
-      candidates: nextCandidates,
-      total_candidates: nextCandidates.length,
-    };
-
     const response = await fetch(
-      `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/extracted-fields`,
+      `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/payload`,
       {
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ payload_json: nextPayload }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -165,102 +128,23 @@ export function FormProcessReviewEditor({
     );
 
     if (!response.ok) {
-      throw new Error("Unable to persist field changes.");
+      throw new Error("Unable to persist payload changes.");
     }
 
-    markSaved();
-  }
-
-  const { run: queuePositionSave } = useDebouncedCallback<PdfFieldCandidate[]>(
-    (nextCandidates) => {
-      void savePayload(nextCandidates).catch(() => {
-        setSaveState("error");
-      });
-    },
-    POSITION_SAVE_DEBOUNCE_MS,
-  );
-
-  function markSaved() {
     setSaveState("saved");
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
+    setPreviewVersion((current) => current + 1);
+    window.setTimeout(() => {
       setSaveState("idle");
     }, 1200);
   }
 
-  async function handleCandidateDelete(candidateIndex: number) {
-    setSaveState("saving");
-    const response = await fetch(
-      `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/extracted-fields`,
-      {
-        body: JSON.stringify({ candidateIndex }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "DELETE",
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error("Unable to delete extracted field.");
-    }
-
-    const payload = (await response.json()) as PdfFieldParseResult;
-    setCandidates(payload.candidates);
-    setActiveCandidateIndex((current) => {
-      if (current === null) {
-        return null;
-      }
-      if (current === candidateIndex) {
-        return null;
-      }
-      return current > candidateIndex ? current - 1 : current;
+  const { run: queuePayloadSave } = useDebouncedCallback<
+    Record<string, unknown>
+  >((nextPayload) => {
+    void persistPayload(nextPayload).catch(() => {
+      setSaveState("error");
     });
-    markSaved();
-  }
-
-  async function handleCandidateValueSave() {
-    if (pendingValueEditIndex === null) {
-      return;
-    }
-
-    setSaveState("saving");
-    setIsSubmittingFieldEdit(true);
-    try {
-      const response = await fetch(
-        `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/extracted-fields`,
-        {
-          body: JSON.stringify({
-            candidateIndex: pendingValueEditIndex,
-            label: pendingLabel,
-            name: normalizeFieldName(pendingLabel),
-            rule: pendingRule,
-            value: pendingValue,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          method: "PATCH",
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Unable to update extracted field value.");
-      }
-
-      const payload = (await response.json()) as PdfFieldParseResult;
-      setCandidates(payload.candidates);
-      markSaved();
-      setPendingValueEditIndex(null);
-      setPendingLabel("");
-      setPendingRule("");
-      setPendingValue("");
-    } finally {
-      setIsSubmittingFieldEdit(false);
-    }
-  }
+  }, 350);
 
   async function handleProcessStatusChange(
     nextStatus: "finalized" | "ready_for_review",
@@ -288,9 +172,16 @@ export function FormProcessReviewEditor({
     }
   }
 
+  function handleFieldChange(path: string, value: string) {
+    const nextPayload = setPayloadValue(payloadJson, path, value);
+    setPayloadJson(nextPayload);
+    queuePayloadSave(nextPayload);
+    setIsPreviewLoading(true);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <Card className="border-zinc-300/70 bg-white/85 backdrop-blur-sm">
           <CardContent className="space-y-4">
             {process.failure_reason ? (
@@ -306,15 +197,16 @@ export function FormProcessReviewEditor({
             ) : null}
             {!isEditable && !isFinalized ? (
               <p className="text-sm text-zinc-500">
-                Field editing unlocks once the process reaches Ready for review.
+                Payload editing unlocks once the process reaches Ready for
+                review.
               </p>
             ) : null}
-            <div className="flex items-center justify-between gap-2 overflow-x-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex shrink-0 items-center gap-2">
                 <StatusBadge status={process.status} />
                 <SaveBadge saveState={saveState} />
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                 <Button
                   type="button"
                   size="sm"
@@ -345,24 +237,6 @@ export function FormProcessReviewEditor({
                     </>
                   )}
                 </Button>
-                {isEditable ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5"
-                    onClick={() => {
-                      setIsPreviewMode((current) => !current);
-                    }}
-                  >
-                    {isPreviewMode ? (
-                      <EyeOff className="size-4" />
-                    ) : (
-                      <Eye className="size-4" />
-                    )}
-                    Preview
-                  </Button>
-                ) : null}
                 {POLLABLE_STATUSES.has(process.status) ? (
                   <Button
                     type="button"
@@ -370,6 +244,7 @@ export function FormProcessReviewEditor({
                     size="sm"
                     className="h-8 px-2.5"
                     onClick={() => {
+                      setIsPreviewLoading(true);
                       router.refresh();
                     }}
                   >
@@ -378,19 +253,56 @@ export function FormProcessReviewEditor({
                   </Button>
                 ) : null}
                 {isFinalized ? (
-                  <Button
-                    asChild
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5"
-                  >
-                    <a href={finalizedFileUrl}>
+                  <div ref={downloadMenuRef} className="relative">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5"
+                      aria-expanded={isDownloadMenuOpen}
+                      aria-haspopup="menu"
+                      onClick={() => {
+                        setIsDownloadMenuOpen((current) => !current);
+                      }}
+                    >
                       <Download className="size-4" />
-                      Download
-                    </a>
-                  </Button>
+                      <span className="sr-only">Download finalized file</span>
+                    </Button>
+                    {isDownloadMenuOpen ? (
+                      <div className="absolute right-0 bottom-full z-20 mb-2 w-44 overflow-hidden rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg">
+                        <a
+                          href={finalizedPdfFileUrl}
+                          className="flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100"
+                          onClick={() => {
+                            setIsDownloadMenuOpen(false);
+                          }}
+                        >
+                          PDF
+                        </a>
+                        <a
+                          href={finalizedWordFileUrl}
+                          className="flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100"
+                          onClick={() => {
+                            setIsDownloadMenuOpen(false);
+                          }}
+                        >
+                          Word
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5"
+                  onClick={() => {
+                    setIsPreviewDialogOpen(true);
+                  }}
+                >
+                  <Expand className="size-4" />
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -405,125 +317,61 @@ export function FormProcessReviewEditor({
                 </Button>
               </div>
             </div>
-
-            <CandidatePdfViewer
-              activeCandidateIndex={activeCandidateIndex}
-              candidates={candidates}
-              createCandidateRequest={0}
-              fileUrl={`/api/forms/${encodeURIComponent(processForm.source_form_id)}/file`}
-              isEditable={isEditable}
-              onCommitCandidates={queuePositionSave}
-              onSetCandidates={setCandidates}
-              showBboxes={!isFinalized && !isPreviewMode}
-              onCandidateSelect={(candidateIndex) => {
-                setActiveCandidateIndex(candidateIndex);
-              }}
-            />
+            <div className="relative h-[78vh] overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100">
+              {isPreviewLoading ? (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/88 backdrop-blur-sm">
+                  <LoaderCircle className="size-8 animate-spin text-zinc-500" />
+                  <p className="text-sm text-zinc-600">
+                    Rendering PDF preview...
+                  </p>
+                </div>
+              ) : null}
+              <PdfPreviewViewer
+                key={previewFileUrl}
+                title={`${processForm.name} preview`}
+                src={previewFileUrl}
+                onLoadingStateChange={setIsPreviewLoading}
+                showZoomControls={false}
+              />
+            </div>
           </CardContent>
         </Card>
 
         <Card className="self-start border-zinc-300/70 bg-white/85 backdrop-blur-sm lg:sticky lg:top-4">
           <CardHeader>
-            <CardTitle>{isFinalized ? "Finalized Values" : "Fields"}</CardTitle>
+            <CardTitle>
+              {isFinalized ? "Finalized Payload" : "Payload Fields"}
+            </CardTitle>
           </CardHeader>
-          <CardContent
-            ref={detectedFieldsListRef}
-            className="h-[calc(100vh-16rem)] space-y-2 overflow-y-auto pr-2"
-          >
-            {candidates.length === 0 ? (
+          <CardContent className="h-[calc(100vh-16rem)] space-y-3 overflow-y-auto pr-2">
+            {fields.length === 0 ? (
               <p className="text-sm text-zinc-600">
-                No saved extraction data is available yet.
+                No editable payload fields are available yet.
               </p>
             ) : (
-              sortedCandidates.map(({ candidate, index }) => {
-                const isActive = index === activeCandidateIndex;
-                return (
-                  <div
-                    key={`${candidate.page}-${candidate.span_index}-${index}`}
-                    data-detected-field-index={index}
-                    className={`relative rounded-lg border p-3 transition ${
-                      isActive
-                        ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-200"
-                        : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="block w-full text-left"
-                      onClick={() => {
-                        setActiveCandidateIndex((current) =>
-                          current === index ? null : index,
-                        );
-                      }}
-                    >
-                      {normalizeCandidateText(candidate.rule) ? (
-                        <span
-                          className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-white/90 text-amber-600 shadow-sm"
-                          title="This field has a custom rule."
-                        >
-                          <AlertCircle className="size-3.5" />
-                        </span>
-                      ) : null}
-                      <div className="min-w-0 flex-1 space-y-3">
-                        <div className="pr-10 text-left">
-                          <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                            Name
-                          </p>
-                          <p className="truncate text-sm font-medium text-zinc-900">
-                            {getCandidateDisplayName(candidate)}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase">
-                            Value
-                          </p>
-                          <p className="text-sm text-zinc-700">
-                            {candidate.value?.trim() ? (
-                              candidate.value
-                            ) : (
-                              <span className="text-zinc-400">No value</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                    {isActive && isEditable ? (
-                      <span
-                        className="absolute right-3 bottom-3 flex items-center gap-1"
-                        aria-hidden="true"
-                      >
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 rounded-full border-0 p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-cyan-600"
-                          onClick={() => {
-                            setPendingValueEditIndex(index);
-                            setPendingLabel(
-                              getCandidateEditableLabel(candidate),
-                            );
-                            setPendingRule(candidate.rule ?? "");
-                            setPendingValue(candidate.value ?? "");
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 rounded-full border-0 p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-red-600"
-                          onClick={() => {
-                            setPendingDeleteIndex(index);
-                          }}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </span>
-                    ) : null}
+              fields.map((field) => (
+                <div
+                  key={field.path}
+                  className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3"
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-zinc-900">
+                      {field.label}
+                    </p>
+                    <p className="text-xs tracking-wide text-zinc-500">
+                      {field.path}
+                    </p>
                   </div>
-                );
-              })
+                  <Input
+                    value={field.value}
+                    disabled={!isEditable}
+                    className="bg-white"
+                    onChange={(event) => {
+                      handleFieldChange(field.path, event.target.value);
+                    }}
+                  />
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
@@ -546,9 +394,7 @@ export function FormProcessReviewEditor({
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setIsContextDialogOpen(false);
-              }}
+              onClick={() => setIsContextDialogOpen(false)}
             >
               Close
             </Button>
@@ -556,266 +402,178 @@ export function FormProcessReviewEditor({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={pendingValueEditIndex !== null}
-        onOpenChange={(open) => {
-          if (!open && !isSubmittingFieldEdit) {
-            setPendingValueEditIndex(null);
-            setPendingLabel("");
-            setPendingRule("");
-            setPendingValue("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Modify field</DialogTitle>
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="max-w-[95vw] p-3 pt-14 sm:max-w-[95vw]">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{processForm.name} full screen preview</DialogTitle>
             <DialogDescription>
-              Adjust the copied field label, custom rule, and current value for
-              this process.
+              Full screen PDF preview with page navigation and zoom controls.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <label
-              htmlFor="candidate-label-modal"
-              className="block text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase"
-            >
-              Label
-            </label>
-            <Input
-              id="candidate-label-modal"
-              value={pendingLabel}
-              className="bg-white"
-              disabled={isSubmittingFieldEdit}
-              onChange={(event) => {
-                setPendingLabel(event.target.value);
-              }}
+          <div className="h-[calc(92vh-3.5rem)] overflow-hidden rounded-lg">
+            <PdfPreviewViewer
+              key={`dialog-${previewFileUrl}`}
+              title={`${processForm.name} preview`}
+              src={previewFileUrl}
+              className="h-full"
             />
           </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="candidate-rule-modal"
-              className="block text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase"
-            >
-              Rule
-            </label>
-            <Input
-              id="candidate-rule-modal"
-              value={pendingRule}
-              className="bg-white"
-              disabled={isSubmittingFieldEdit}
-              onChange={(event) => {
-                setPendingRule(event.target.value);
-              }}
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="candidate-value-modal"
-              className="block text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase"
-            >
-              Value
-            </label>
-            <Input
-              id="candidate-value-modal"
-              value={pendingValue}
-              className="bg-white"
-              disabled={isSubmittingFieldEdit}
-              onChange={(event) => {
-                setPendingValue(event.target.value);
-              }}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSubmittingFieldEdit}
-              onClick={() => {
-                setPendingValueEditIndex(null);
-                setPendingLabel("");
-                setPendingRule("");
-                setPendingValue("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={isSubmittingFieldEdit}
-              onClick={() => {
-                void handleCandidateValueSave().catch(() => {
-                  setSaveState("error");
-                });
-              }}
-            >
-              {isSubmittingFieldEdit ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save field"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={pendingDeleteIndex !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingDeleteIndex(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete extracted field?</DialogTitle>
-            <DialogDescription>
-              This removes the selected field from the copied process form.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setPendingDeleteIndex(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                if (pendingDeleteIndex === null) {
-                  return;
-                }
-
-                handleCandidateDelete(pendingDeleteIndex)
-                  .catch(() => {
-                    setSaveState("error");
-                  })
-                  .finally(() => {
-                    setPendingDeleteIndex(null);
-                  });
-              }}
-            >
-              Delete field
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function normalizeCandidateText(value: string | null | undefined): string {
-  return typeof value === "string" ? value.trim() : "";
+function normalizePayload(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (!value || Array.isArray(value)) {
+    return {};
+  }
+  return structuredClone(value);
 }
 
-function getCandidateDisplayName(candidate: PdfFieldCandidate): string {
-  const suggestedLabel = normalizeCandidateText(candidate.label);
-  if (suggestedLabel) {
-    return suggestedLabel;
+function flattenPayloadFields(
+  payload: Record<string, unknown>,
+): Array<{ label: string; path: string; value: string }> {
+  const fields: Array<{ label: string; path: string; value: string }> = [];
+
+  function visit(value: unknown, path: string) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        visit(item, `${path}[${index}]`);
+      });
+      return;
+    }
+
+    if (value && typeof value === "object") {
+      Object.entries(value).forEach(([key, nestedValue]) => {
+        visit(nestedValue, path ? `${path}.${key}` : key);
+      });
+      return;
+    }
+
+    if (typeof value === "string") {
+      fields.push({
+        label: labelFromPath(path),
+        path,
+        value,
+      });
+    }
   }
 
-  const suggestedName = normalizeCandidateText(candidate.name);
-  if (suggestedName) {
-    return suggestedName;
-  }
-
-  const anchorLabel = normalizeCandidateText(candidate.anchor_before);
-  if (anchorLabel) {
-    return anchorLabel;
-  }
-
-  const lineLabel = normalizeCandidateText(candidate.line_text);
-  if (lineLabel) {
-    return lineLabel;
-  }
-
-  return candidate.kind;
+  visit(payload, "");
+  return fields;
 }
 
-function getCandidateEditableLabel(candidate: PdfFieldCandidate): string {
-  return (
-    normalizeCandidateText(candidate.label) ||
-    getCandidateDisplayName(candidate)
-  );
+function setPayloadValue(
+  payload: Record<string, unknown>,
+  path: string,
+  value: string,
+): Record<string, unknown> {
+  const nextPayload = structuredClone(payload);
+  let current: unknown = nextPayload;
+  const tokens = tokenizePath(path);
+
+  tokens.slice(0, -1).forEach((token) => {
+    if (typeof token === "number" && Array.isArray(current)) {
+      current = current[token];
+      return;
+    }
+    if (typeof token === "string" && current && typeof current === "object") {
+      current = (current as Record<string, unknown>)[token];
+    }
+  });
+
+  const finalToken = tokens[tokens.length - 1];
+  if (typeof finalToken === "number" && Array.isArray(current)) {
+    current[finalToken] = value;
+  } else if (
+    typeof finalToken === "string" &&
+    current &&
+    typeof current === "object"
+  ) {
+    (current as Record<string, unknown>)[finalToken] = value;
+  }
+
+  return nextPayload;
 }
 
-function normalizeFieldName(value: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  return normalized || "field";
+function tokenizePath(path: string): Array<string | number> {
+  const tokens: Array<string | number> = [];
+  path.split(".").forEach((segment) => {
+    let remainder = segment;
+    while (remainder.length > 0) {
+      const bracketIndex = remainder.indexOf("[");
+      if (bracketIndex === -1) {
+        tokens.push(remainder);
+        return;
+      }
+      if (bracketIndex > 0) {
+        tokens.push(remainder.slice(0, bracketIndex));
+      }
+      const endIndex = remainder.indexOf("]", bracketIndex);
+      tokens.push(Number(remainder.slice(bracketIndex + 1, endIndex)));
+      remainder = remainder.slice(endIndex + 1);
+    }
+  });
+  return tokens;
 }
 
-function compareCandidatesByPdfPosition(
-  left: PdfFieldCandidate,
-  right: PdfFieldCandidate,
-): number {
-  if (left.page !== right.page) {
-    return left.page - right.page;
-  }
-  if (left.bbox[1] !== right.bbox[1]) {
-    return left.bbox[1] - right.bbox[1];
-  }
-  if (left.bbox[0] !== right.bbox[0]) {
-    return left.bbox[0] - right.bbox[0];
-  }
-  return left.span_index - right.span_index;
+function labelFromPath(path: string): string {
+  return path
+    .replaceAll(".", " ")
+    .replaceAll("[", " ")
+    .replaceAll("]", "")
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function SaveBadge({ saveState }: { saveState: SaveState }) {
   if (saveState === "idle") {
     return null;
   }
+
   if (saveState === "saving") {
     return (
       <Pill
-        value="saving"
-        icon={<LoaderCircle className="size-3.5 animate-spin" />}
-        variant="outline"
-        className="border-zinc-300 bg-white py-1.5 text-zinc-600"
+        value="Saving"
+        titleCase={false}
+        className="bg-zinc-100 text-zinc-700"
       />
     );
   }
+
   if (saveState === "saved") {
     return (
       <Pill
-        value="saved"
-        icon={<CheckCircle2 className="size-3.5" />}
-        variant="outline"
-        className="border-emerald-300 bg-emerald-50 py-1.5 text-emerald-700"
+        value="Saved"
+        titleCase={false}
+        className="bg-emerald-100 text-emerald-700"
       />
     );
   }
+
   return (
     <Pill
-      value="save_failed"
-      icon={<TriangleAlert className="size-3.5" />}
-      variant="outline"
-      className="border-amber-300 bg-amber-50 py-1.5 text-amber-800"
+      value="Save error"
+      titleCase={false}
+      className="bg-red-100 text-red-700"
     />
   );
 }
 
 function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
-  return (
-    <Pill
-      value={status}
-      normalizeValue
-      titleCase
-      variant="secondary"
-      className="bg-zinc-100 text-zinc-700"
-    />
-  );
+  const config = {
+    failed: "bg-red-100 text-red-700",
+    filling: "bg-amber-100 text-amber-700",
+    finalized: "bg-zinc-900 text-white",
+    queued: "bg-blue-100 text-blue-700",
+    ready_for_review: "bg-emerald-100 text-emerald-700",
+  }[status];
+
+  return <Pill value={status} normalizeValue titleCase className={config} />;
 }

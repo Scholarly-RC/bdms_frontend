@@ -23,6 +23,7 @@ type CreateFormProcessFormProps = {
 
 export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
   const [title, setTitle] = useState("");
+  const [caseId, setCaseId] = useState("");
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -85,6 +86,17 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor="case_id">Case ID</Label>
+        <Input
+          id="case_id"
+          name="case_id"
+          maxLength={160}
+          placeholder="Optional case reference"
+          value={caseId}
+          onChange={(event) => setCaseId(event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
         <Label>Source Forms</Label>
         <div className="space-y-3">
           <div ref={dropdownRef} className="relative">
@@ -125,19 +137,19 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
                         <button
                           key={form.id}
                           type="button"
-                          className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex w-full items-start justify-between gap-3 rounded-lg border border-transparent px-3 py-3 text-left hover:border-zinc-200 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => handleFormToggle(form.id)}
                         >
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-zinc-900">
-                              {form.name}
-                            </span>
-                            <span className="block text-xs text-zinc-500">
+                          <span className="min-w-0 space-y-1">
+                            <span className="block text-sm font-semibold leading-5 text-zinc-900">
                               {form.description || "No description"}
+                            </span>
+                            <span className="block text-xs tracking-wide text-zinc-500">
+                              {form.name}
                             </span>
                           </span>
                           {isSelected ? (
-                            <Check className="mt-0.5 size-4 shrink-0 text-zinc-700" />
+                            <Check className="mt-1 size-4 shrink-0 text-zinc-700" />
                           ) : null}
                         </button>
                       );

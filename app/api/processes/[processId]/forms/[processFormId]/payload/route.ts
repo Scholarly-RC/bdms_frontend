@@ -38,7 +38,7 @@ export async function PUT(
   const forwarded = await fetchWithSessionRefresh(
     `/processes/${encodeURIComponent(normalizedProcessId)}/forms/${encodeURIComponent(
       normalizedProcessFormId,
-    )}/extracted-fields`,
+    )}/payload`,
     {
       body,
       headers: {
@@ -46,114 +46,6 @@ export async function PUT(
           request.headers.get("content-type") ?? "application/json",
       },
       method: "PUT",
-    },
-  );
-
-  return toClientResponse(forwarded);
-}
-
-export async function DELETE(
-  request: Request,
-  context: Params,
-): Promise<Response> {
-  const { processId, processFormId } = await context.params;
-  const normalizedProcessId = processId.trim();
-  const normalizedProcessFormId = processFormId.trim();
-  const requestBody = (await request.json().catch(() => null)) as {
-    candidateIndex?: number;
-  } | null;
-  const candidateIndex = requestBody?.candidateIndex;
-
-  if (!normalizedProcessId || !normalizedProcessFormId) {
-    return Response.json(
-      { detail: "Invalid process form id." },
-      { status: 400 },
-    );
-  }
-
-  if (
-    typeof candidateIndex !== "number" ||
-    !Number.isInteger(candidateIndex) ||
-    candidateIndex < 0
-  ) {
-    return Response.json(
-      { detail: "Invalid extracted field index." },
-      { status: 400 },
-    );
-  }
-
-  const forwarded = await fetchWithSessionRefresh(
-    `/processes/${encodeURIComponent(normalizedProcessId)}/forms/${encodeURIComponent(
-      normalizedProcessFormId,
-    )}/extracted-fields/${candidateIndex}`,
-    {
-      method: "DELETE",
-    },
-  );
-
-  return toClientResponse(forwarded);
-}
-
-export async function PATCH(
-  request: Request,
-  context: Params,
-): Promise<Response> {
-  const { processId, processFormId } = await context.params;
-  const normalizedProcessId = processId.trim();
-  const normalizedProcessFormId = processFormId.trim();
-  const requestBody = (await request.json().catch(() => null)) as {
-    candidateIndex?: number;
-    label?: string;
-    name?: string;
-    rule?: string;
-    value?: string;
-  } | null;
-
-  if (!normalizedProcessId || !normalizedProcessFormId) {
-    return Response.json(
-      { detail: "Invalid process form id." },
-      { status: 400 },
-    );
-  }
-
-  if (
-    typeof requestBody?.candidateIndex !== "number" ||
-    !Number.isInteger(requestBody.candidateIndex) ||
-    requestBody.candidateIndex < 0
-  ) {
-    return Response.json(
-      { detail: "Invalid extracted field index." },
-      { status: 400 },
-    );
-  }
-
-  if (
-    typeof requestBody.label !== "string" ||
-    typeof requestBody.name !== "string" ||
-    typeof requestBody.rule !== "string" ||
-    typeof requestBody.value !== "string"
-  ) {
-    return Response.json(
-      { detail: "Invalid extracted field payload." },
-      { status: 400 },
-    );
-  }
-
-  const forwarded = await fetchWithSessionRefresh(
-    `/processes/${encodeURIComponent(normalizedProcessId)}/forms/${encodeURIComponent(
-      normalizedProcessFormId,
-    )}/extracted-fields/${requestBody.candidateIndex}`,
-    {
-      body: JSON.stringify({
-        label: requestBody.label,
-        name: requestBody.name,
-        rule: requestBody.rule,
-        value: requestBody.value,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      method: "PATCH",
     },
   );
 
