@@ -3,6 +3,7 @@
 import { Eye, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { PdfPreviewViewer } from "@/components/shared/pdf-preview-viewer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,12 +69,15 @@ export function FormPreviewButton({
                 <p className="text-sm text-zinc-600">Loading preview PDF...</p>
               </div>
             ) : null}
-            <iframe
-              title={`${formName} preview`}
-              src={previewUrl}
-              className="h-full w-full bg-white"
-              onLoad={() => setIsLoading(false)}
-            />
+            {isOpen ? (
+              <PdfPreviewViewer
+                key={previewUrl}
+                title={`${formName} preview`}
+                src={previewUrl}
+                className="h-full"
+                onLoadingStateChange={setIsLoading}
+              />
+            ) : null}
           </div>
         </div>
       </DialogContent>

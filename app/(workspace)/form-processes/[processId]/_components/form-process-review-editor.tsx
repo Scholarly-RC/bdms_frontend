@@ -17,8 +17,9 @@ import type {
   FormProcessFormRead,
   FormProcessRead,
 } from "@/app/(workspace)/form-processes/_lib/types";
-import { PdfPreviewViewer } from "@/app/(workspace)/form-processes/[processId]/_components/pdf-preview-viewer";
 import { ConfirmationModal } from "@/components/shared/confirmation-modal";
+import { PdfPreviewDialog } from "@/components/shared/pdf-preview-dialog";
+import { PdfPreviewViewer } from "@/components/shared/pdf-preview-viewer";
 import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -650,24 +651,15 @@ export function FormProcessReviewEditor({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="max-w-[95vw] p-3 pt-14 sm:max-w-[95vw]">
-          <DialogHeader className="sr-only">
-            <DialogTitle>{processForm.name} full screen preview</DialogTitle>
-            <DialogDescription>
-              Full screen PDF preview with page navigation and zoom controls.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="h-[calc(92vh-3.5rem)] overflow-hidden rounded-lg">
-            <PdfPreviewViewer
-              key={`dialog-${previewFileUrl}`}
-              title={`${processForm.name} preview`}
-              src={previewFileUrl}
-              className="h-full"
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <PdfPreviewDialog
+        open={isPreviewDialogOpen}
+        onOpenChange={setIsPreviewDialogOpen}
+        title={`${processForm.name} full screen preview`}
+        description="Full screen PDF preview with page navigation and zoom controls."
+        viewerTitle={`${processForm.name} preview`}
+        src={previewFileUrl}
+        viewerKey={`dialog-${previewFileUrl}`}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ type BarangayProfilePayload = {
   province: string;
   municipality: string;
   barangay: string;
+  region: string;
 };
 
 export async function PUT(request: Request): Promise<Response> {

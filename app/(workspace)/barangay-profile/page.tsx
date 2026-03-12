@@ -16,6 +16,7 @@ async function fetchBarangayProfile(): Promise<BarangayProfileRead> {
       province: "",
       municipality: "",
       barangay: "",
+      region: "",
     };
   }
 

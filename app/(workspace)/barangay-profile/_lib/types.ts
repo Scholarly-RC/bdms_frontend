@@ -2,6 +2,7 @@ export type BarangayProfileRead = {
   province: string;
   municipality: string;
   barangay: string;
+  region: string;
 };
 
 export type BarangayPersonnelRead = {

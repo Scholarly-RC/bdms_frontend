@@ -30,8 +30,9 @@ export function BarangayProfileForm({ profile }: BarangayProfileFormProps) {
     const province = String(formData.get("province") ?? "").trim();
     const municipality = String(formData.get("municipality") ?? "").trim();
     const barangay = String(formData.get("barangay") ?? "").trim();
+    const region = String(formData.get("region") ?? "").trim();
 
-    if (!province || !municipality || !barangay) {
+    if (!province || !municipality || !barangay || !region) {
       toast.error("All fields are required.");
       return;
     }
@@ -47,6 +48,7 @@ export function BarangayProfileForm({ profile }: BarangayProfileFormProps) {
           province,
           municipality,
           barangay,
+          region,
         }),
       });
 
@@ -100,6 +102,18 @@ export function BarangayProfileForm({ profile }: BarangayProfileFormProps) {
           required
           maxLength={120}
           defaultValue={profile.barangay}
+          disabled={!isEditing}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="region">Region</Label>
+        <Input
+          id="region"
+          name="region"
+          required
+          maxLength={120}
+          defaultValue={profile.region}
           disabled={!isEditing}
         />
       </div>
