@@ -24,6 +24,10 @@ type CreateFormProcessFormProps = {
 export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
   const [title, setTitle] = useState("");
   const [caseId, setCaseId] = useState("");
+  const [complainants, setComplainants] = useState("");
+  const [respondents, setRespondents] = useState("");
+  const [natureOfCase, setNatureOfCase] = useState("");
+  const [actionTaken, setActionTaken] = useState("");
   const [selectedFormIds, setSelectedFormIds] = useState<string[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -74,7 +78,9 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
   return (
     <form action={createFormProcessAction} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="title">Process Title</Label>
+        <Label htmlFor="title" className="inline-flex items-center gap-1">
+          Process Title<span className="text-red-600">*</span>
+        </Label>
         <Input
           id="title"
           name="title"
@@ -96,8 +102,72 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
           onChange={(event) => setCaseId(event.target.value)}
         />
       </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="complainants">Complainant(s)</Label>
+          <Textarea
+            id="complainants"
+            name="complainants"
+            maxLength={3000}
+            placeholder="One or more names, one per line or comma-separated"
+            value={complainants}
+            onChange={(event) => setComplainants(event.target.value)}
+            className="min-h-28"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="respondents">Respondent(s)</Label>
+          <Textarea
+            id="respondents"
+            name="respondents"
+            maxLength={3000}
+            placeholder="One or more names, one per line or comma-separated"
+            value={respondents}
+            onChange={(event) => setRespondents(event.target.value)}
+            className="min-h-28"
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="nature_of_case">Nature of Case</Label>
+          <select
+            id="nature_of_case"
+            name="nature_of_case"
+            value={natureOfCase}
+            onChange={(event) => setNatureOfCase(event.target.value)}
+            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-200"
+          >
+            <option value="">Select nature of case</option>
+            <option value="criminal">Criminal</option>
+            <option value="civil">Civil</option>
+            <option value="others">Others</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="action_taken">Action Taken</Label>
+          <select
+            id="action_taken"
+            name="action_taken"
+            value={actionTaken}
+            onChange={(event) => setActionTaken(event.target.value)}
+            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-200"
+          >
+            <option value="">Select action taken</option>
+            <option value="mediation">Mediation</option>
+            <option value="conciliation">Conciliation</option>
+            <option value="arbitration">Arbitration</option>
+            <option value="repudiation">Repudiation</option>
+            <option value="dismissed">Dismissed</option>
+            <option value="certified_case">Certified Case</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+      </div>
       <div className="space-y-2">
-        <Label>Source Forms</Label>
+        <Label className="inline-flex items-center gap-1">
+          Source Forms<span className="text-red-600">*</span>
+        </Label>
         <div className="space-y-3">
           <div ref={dropdownRef} className="relative">
             <Button
@@ -186,7 +256,9 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="context">Context</Label>
+        <Label htmlFor="context" className="inline-flex items-center gap-1">
+          Context<span className="text-red-600">*</span>
+        </Label>
         <Textarea
           id="context"
           name="context"

@@ -84,9 +84,9 @@ export default async function FormProcessDetailPage({
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-2">
+          <h1 className="break-words text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
             {process.title}
           </h1>
           <p className="text-sm font-medium text-zinc-800">
@@ -96,7 +96,7 @@ export default async function FormProcessDetailPage({
             <p className="text-sm text-zinc-600">{processForm.description}</p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-end justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-end justify-end gap-2">
           {selectorOptions.length > 1 || availableBaseForms.length > 0 ? (
             <ProcessFormSelector
               processId={process.id}

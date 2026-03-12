@@ -19,6 +19,7 @@ export type FormProcessFormRead = {
   storage_bucket: string;
   storage_object_path: string;
   payload_json: Record<string, unknown> | null;
+  payload_field_order: string[] | null;
   payload_updated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -29,6 +30,18 @@ export type FormProcessRead = {
   title: string;
   context: string;
   case_id: string | null;
+  complainants: string[];
+  respondents: string[];
+  nature_of_case: "criminal" | "civil" | "others" | null;
+  action_taken:
+    | "mediation"
+    | "conciliation"
+    | "arbitration"
+    | "repudiation"
+    | "dismissed"
+    | "certified_case"
+    | "pending"
+    | null;
   status: "queued" | "filling" | "ready_for_review" | "failed" | "finalized";
   created_by: string;
   updated_by: string | null;

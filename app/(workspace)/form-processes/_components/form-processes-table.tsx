@@ -74,13 +74,7 @@ export function FormProcessesTable({ processes }: FormProcessesTableProps) {
               </TableCell>
               <TableCell className="py-4 align-middle">
                 <div className="space-y-2">
-                  <StatusBadge status={process.status} />
-                  {process.current_job ? (
-                    <p className="text-xs text-zinc-500">
-                      Job {formatJobStatus(process.current_job.status)} ·{" "}
-                      {process.current_job.progress}%
-                    </p>
-                  ) : null}
+                  <StatusBadge process={process} />
                   {process.failure_reason ? (
                     <p className="max-w-xs text-xs text-red-600">
                       {process.failure_reason}
@@ -140,7 +134,8 @@ export function FormProcessesTable({ processes }: FormProcessesTableProps) {
   );
 }
 
-function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
+function StatusBadge({ process }: { process: FormProcessRead }) {
+  const { status, current_job: currentJob } = process;
   const styles =
     status === "finalized"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -150,11 +145,23 @@ function StatusBadge({ status }: { status: FormProcessRead["status"] }) {
           ? "border-red-200 bg-red-50 text-red-700"
           : "border-amber-200 bg-amber-50 text-amber-700";
 
+  const normalizedStatus = formatPillValue(status, {
+    normalizeValue: true,
+    titleCase: true,
+  });
+  const shouldShowFillingProgress =
+    status === "filling" &&
+    typeof currentJob?.progress === "number" &&
+    currentJob.progress < 100;
+  const label = shouldShowFillingProgress
+    ? `${normalizedStatus} ${currentJob.progress}%`
+    : normalizedStatus;
+
   return (
     <Pill
-      value={status}
-      normalizeValue
-      titleCase
+      value={label}
+      normalizeValue={false}
+      titleCase={false}
       variant="outline"
       className={styles}
     />
@@ -177,18 +184,6 @@ function formatShortDate(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
-}
-
-function formatJobStatus(
-  status: FormProcessRead["current_job"] extends infer T
-    ? T extends { status: infer S }
-      ? S
-      : never
-    : never,
-): string {
-  return typeof status === "string"
-    ? formatPillValue(status, { normalizeValue: true, titleCase: true })
-    : "";
 }
 
 function formatProcessName(process: FormProcessRead): string {

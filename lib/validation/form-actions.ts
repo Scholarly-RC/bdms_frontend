@@ -21,6 +21,26 @@ export const barangayProfileFormSchema = z.object({
 export const createFormProcessFormSchema = z.object({
   title: nonEmptyString(160),
   caseId: z.string().trim().max(160).optional().default(""),
+  complainants: z.array(nonEmptyString(160)).max(50).optional().default([]),
+  respondents: z.array(nonEmptyString(160)).max(50).optional().default([]),
+  natureOfCase: z
+    .enum(["criminal", "civil", "others"])
+    .optional()
+    .nullable()
+    .default(null),
+  actionTaken: z
+    .enum([
+      "mediation",
+      "conciliation",
+      "arbitration",
+      "repudiation",
+      "dismissed",
+      "certified_case",
+      "pending",
+    ])
+    .optional()
+    .nullable()
+    .default(null),
   formIds: z.array(nonEmptyString(255)).min(1),
   context: nonEmptyString(3000),
 });

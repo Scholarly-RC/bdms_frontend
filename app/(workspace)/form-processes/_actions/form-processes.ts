@@ -8,6 +8,28 @@ import {
   deleteFormProcessSchema,
 } from "@/lib/validation/form-actions";
 
+function parsePartyList(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function toNullableOption(
+  value: FormDataEntryValue | null,
+): string | null | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function getErrorMessage(status: number, detail?: string): string {
   if (detail) {
     return detail;
@@ -24,6 +46,10 @@ export async function createFormProcessAction(
   const parsed = createFormProcessFormSchema.safeParse({
     title: formData.get("title"),
     caseId: formData.get("case_id"),
+    complainants: parsePartyList(formData.get("complainants")),
+    respondents: parsePartyList(formData.get("respondents")),
+    natureOfCase: toNullableOption(formData.get("nature_of_case")),
+    actionTaken: toNullableOption(formData.get("action_taken")),
     formIds: formData
       .getAll("form_ids")
       .map((value) => (typeof value === "string" ? value : ""))
@@ -37,7 +63,16 @@ export async function createFormProcessAction(
     );
   }
 
-  const { caseId, formIds, context, title } = parsed.data;
+  const {
+    actionTaken,
+    caseId,
+    complainants,
+    context,
+    formIds,
+    natureOfCase,
+    respondents,
+    title,
+  } = parsed.data;
 
   const response = await backendFetchFromSession("/processes", {
     method: "POST",
@@ -47,6 +82,10 @@ export async function createFormProcessAction(
     body: JSON.stringify({
       title,
       case_id: caseId || null,
+      complainants,
+      respondents,
+      nature_of_case: natureOfCase,
+      action_taken: actionTaken,
       form_ids: formIds,
       context,
     }),

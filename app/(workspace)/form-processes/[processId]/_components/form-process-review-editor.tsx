@@ -93,8 +93,8 @@ export function FormProcessReviewEditor({
   const previewRequestVersion = `${process.status}:${processForm.id}:${processForm.payload_updated_at ?? "pending"}:${previewVersion}`;
   const previewFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/preview-file?v=${encodeURIComponent(previewRequestVersion)}`;
   const fields = useMemo(
-    () => flattenPayloadFields(payloadJson),
-    [payloadJson],
+    () => flattenPayloadFields(payloadJson, processForm.payload_field_order),
+    [payloadJson, processForm.payload_field_order],
   );
   const hasUnsavedChanges = useMemo(
     () => !arePayloadsEqual(payloadJson, initialPayload),
@@ -317,12 +317,6 @@ export function FormProcessReviewEditor({
             {process.failure_reason ? (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {process.failure_reason}
-              </div>
-            ) : null}
-            {process.current_job ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                Job progress: {process.current_job.progress}% ·{" "}
-                {process.current_job.status.replaceAll("_", " ")}
               </div>
             ) : null}
             {!isEditable && !isFinalized ? (
@@ -549,14 +543,9 @@ export function FormProcessReviewEditor({
                   key={field.path}
                   className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3"
                 >
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {field.label}
-                    </p>
-                    <p className="text-xs tracking-wide text-zinc-500">
-                      {field.path}
-                    </p>
-                  </div>
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {field.label}
+                  </p>
                   <Input
                     value={field.value}
                     disabled={!isEditable}
@@ -694,6 +683,7 @@ function normalizePayload(
 
 function flattenPayloadFields(
   payload: Record<string, unknown>,
+  preferredOrder: string[] | null = null,
 ): Array<{ label: string; path: string; value: string }> {
   const fields: Array<{ label: string; path: string; value: string }> = [];
 
@@ -722,6 +712,28 @@ function flattenPayloadFields(
   }
 
   visit(payload, "");
+  if (!preferredOrder || preferredOrder.length === 0) {
+    return fields;
+  }
+
+  const orderIndex = new Map<string, number>(
+    preferredOrder.map((path, index) => [path, index]),
+  );
+  fields.sort((left, right) => {
+    const leftIndex = orderIndex.get(left.path);
+    const rightIndex = orderIndex.get(right.path);
+
+    if (leftIndex !== undefined && rightIndex !== undefined) {
+      return leftIndex - rightIndex;
+    }
+    if (leftIndex !== undefined) {
+      return -1;
+    }
+    if (rightIndex !== undefined) {
+      return 1;
+    }
+    return left.path.localeCompare(right.path);
+  });
   return fields;
 }
 
