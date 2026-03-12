@@ -294,16 +294,16 @@ export function ProcessFormSelector({
                       onClick={() => setSelectedBaseFormId(form.id)}
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {form.name}
+                        <span className="block text-sm font-semibold leading-5">
+                          {form.description || "No description"}
                         </span>
                         <span
                           className={cn(
-                            "mt-1 block text-xs",
+                            "mt-1 block text-xs tracking-wide",
                             isSelected ? "text-zinc-300" : "text-zinc-500",
                           )}
                         >
-                          {form.description || "No description"}
+                          {form.name}
                         </span>
                       </span>
                       {isSelected ? (

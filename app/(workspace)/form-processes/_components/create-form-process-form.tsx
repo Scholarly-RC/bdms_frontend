@@ -124,7 +124,7 @@ export function CreateFormProcessForm({ forms }: CreateFormProcessFormProps) {
                     className="pl-9"
                   />
                 </div>
-                <div className="mt-2 max-h-56 overflow-y-auto">
+                <div className="mt-2 flex max-h-56 flex-col gap-2 overflow-y-auto">
                   {filteredForms.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-zinc-500">
                       No matching forms.

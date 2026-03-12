@@ -8,8 +8,9 @@ import {
   LoaderCircle,
   Pencil,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -17,6 +18,7 @@ import type {
   FormProcessRead,
 } from "@/app/(workspace)/form-processes/_lib/types";
 import { PdfPreviewViewer } from "@/app/(workspace)/form-processes/[processId]/_components/pdf-preview-viewer";
+import { ConfirmationModal } from "@/components/shared/confirmation-modal";
 import { Pill } from "@/components/shared/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useDebouncedCallback } from "@/lib/hooks/use-debounced-callback";
+import { Textarea } from "@/components/ui/textarea";
 
 type FormProcessReviewEditorProps = {
   process: FormProcessRead;
@@ -48,6 +50,8 @@ export function FormProcessReviewEditor({
   processForm,
 }: FormProcessReviewEditorProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const initialPayload = useMemo(
     () => normalizePayload(processForm.payload_json),
     [processForm.payload_json],
@@ -56,20 +60,45 @@ export function FormProcessReviewEditor({
     useState<Record<string, unknown>>(initialPayload);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
+  const [isEditingContext, setIsEditingContext] = useState(false);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const [isUpdatingProcessStatus, setIsUpdatingProcessStatus] = useState(false);
+  const [isSavingPayload, setIsSavingPayload] = useState(false);
+  const [isDeletingForm, setIsDeletingForm] = useState(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
+  const [draftContext, setDraftContext] = useState(process.context);
+  const [contextErrorMessage, setContextErrorMessage] = useState("");
+  const [isRerunningProcess, setIsRerunningProcess] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const isEditable = process.status === "ready_for_review";
   const isFinalized = process.status === "finalized";
+  const isProcessRunning = POLLABLE_STATUSES.has(process.status);
+  const canDeleteCurrentForm = !isFinalized && process.forms.length > 1;
+  const trimmedDraftContext = draftContext.trim();
+  const contextWordCount = countWords(trimmedDraftContext);
+  const isContextChanged =
+    normalizeContext(trimmedDraftContext) !== normalizeContext(process.context);
+  const canModifyContext = !isFinalized && !isProcessRunning;
+  const canSubmitContextRerun =
+    canModifyContext &&
+    isContextChanged &&
+    contextWordCount >= 15 &&
+    trimmedDraftContext.length > 0 &&
+    !isRerunningProcess;
   const finalizedPdfFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file?format=pdf`;
   const finalizedWordFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/file?format=word`;
-  const previewFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/preview-file?v=${previewVersion}`;
+  const previewRequestVersion = `${process.status}:${processForm.id}:${processForm.payload_updated_at ?? "pending"}:${previewVersion}`;
+  const previewFileUrl = `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/preview-file?v=${encodeURIComponent(previewRequestVersion)}`;
   const fields = useMemo(
     () => flattenPayloadFields(payloadJson),
     [payloadJson],
+  );
+  const hasUnsavedChanges = useMemo(
+    () => !arePayloadsEqual(payloadJson, initialPayload),
+    [initialPayload, payloadJson],
   );
 
   useEffect(() => {
@@ -77,11 +106,24 @@ export function FormProcessReviewEditor({
   }, [initialPayload]);
 
   useEffect(() => {
+    setDraftContext(process.context);
+  }, [process.context]);
+
+  useEffect(() => {
     setIsPreviewLoading(true);
   }, []);
 
   useEffect(() => {
-    if (!POLLABLE_STATUSES.has(process.status)) {
+    if (!isContextDialogOpen) {
+      setIsEditingContext(false);
+      setDraftContext(process.context);
+      setContextErrorMessage("");
+      setIsRerunningProcess(false);
+    }
+  }, [isContextDialogOpen, process.context]);
+
+  useEffect(() => {
+    if (!isProcessRunning) {
       return;
     }
 
@@ -91,7 +133,7 @@ export function FormProcessReviewEditor({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [process.status, router]);
+  }, [isProcessRunning, router]);
 
   useEffect(() => {
     if (!isDownloadMenuOpen) {
@@ -115,6 +157,7 @@ export function FormProcessReviewEditor({
   }, [isDownloadMenuOpen]);
 
   async function persistPayload(nextPayload: Record<string, unknown>) {
+    setIsSavingPayload(true);
     setSaveState("saving");
     const response = await fetch(
       `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}/payload`,
@@ -136,15 +179,8 @@ export function FormProcessReviewEditor({
     window.setTimeout(() => {
       setSaveState("idle");
     }, 1200);
+    setIsSavingPayload(false);
   }
-
-  const { run: queuePayloadSave } = useDebouncedCallback<
-    Record<string, unknown>
-  >((nextPayload) => {
-    void persistPayload(nextPayload).catch(() => {
-      setSaveState("error");
-    });
-  }, 350);
 
   async function handleProcessStatusChange(
     nextStatus: "finalized" | "ready_for_review",
@@ -172,11 +208,105 @@ export function FormProcessReviewEditor({
     }
   }
 
+  async function handleDeleteCurrentForm() {
+    setIsDeletingForm(true);
+    setDeleteErrorMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/processes/${encodeURIComponent(process.id)}/forms/${encodeURIComponent(processForm.id)}`,
+        {
+          method: "DELETE",
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: string;
+        forms?: Array<{
+          id: string;
+        }>;
+      } | null;
+
+      if (!response.ok) {
+        const message =
+          payload?.detail || "Unable to delete form from process.";
+        setDeleteErrorMessage(message);
+        throw new Error(message);
+      }
+
+      const nextFormId = payload?.forms?.find(
+        (form) => form.id !== processForm.id,
+      )?.id;
+      if (!nextFormId) {
+        router.push("/form-processes");
+        return;
+      }
+
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.set("formId", nextFormId);
+      router.replace(`${pathname}?${nextParams.toString()}`);
+      router.refresh();
+    } finally {
+      setIsDeletingForm(false);
+    }
+  }
+
+  async function handleContextRerun() {
+    if (!canSubmitContextRerun) {
+      return;
+    }
+
+    setIsRerunningProcess(true);
+    setContextErrorMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/processes/${encodeURIComponent(process.id)}/rerun`,
+        {
+          body: JSON.stringify({ context: trimmedDraftContext }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+
+      if (!response.ok) {
+        setContextErrorMessage(
+          payload?.detail || "Unable to rerun form process.",
+        );
+        return;
+      }
+
+      setIsContextDialogOpen(false);
+      router.refresh();
+    } finally {
+      setIsRerunningProcess(false);
+    }
+  }
+
+  async function handleSavePayload() {
+    if (!isEditable || !hasUnsavedChanges || isSavingPayload) {
+      return;
+    }
+
+    try {
+      await persistPayload(payloadJson);
+      router.refresh();
+    } catch {
+      setSaveState("error");
+      setIsSavingPayload(false);
+    }
+  }
+
   function handleFieldChange(path: string, value: string) {
     const nextPayload = setPayloadValue(payloadJson, path, value);
     setPayloadJson(nextPayload);
-    queuePayloadSave(nextPayload);
-    setIsPreviewLoading(true);
+    if (saveState !== "idle") {
+      setSaveState("idle");
+    }
   }
 
   return (
@@ -212,7 +342,9 @@ export function FormProcessReviewEditor({
                   size="sm"
                   className="h-8 px-2.5"
                   disabled={
-                    isUpdatingProcessStatus || (!isEditable && !isFinalized)
+                    isUpdatingProcessStatus ||
+                    (!isEditable && !isFinalized) ||
+                    hasUnsavedChanges
                   }
                   onClick={() => {
                     void handleProcessStatusChange(
@@ -237,7 +369,33 @@ export function FormProcessReviewEditor({
                     </>
                   )}
                 </Button>
-                {POLLABLE_STATUSES.has(process.status) ? (
+                {canDeleteCurrentForm ? (
+                  <ConfirmationModal
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 px-2.5"
+                        disabled={isDeletingForm || isProcessRunning}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    }
+                    title="Delete this form?"
+                    description={
+                      isProcessRunning
+                        ? "This form cannot be deleted while the process is running."
+                        : `This removes ${processForm.name} from the current process. You can add it again later from the Add Another Form dialog.`
+                    }
+                    confirmLabel="Delete form"
+                    confirmVariant="destructive"
+                    isConfirming={isDeletingForm}
+                    errorMessage={deleteErrorMessage}
+                    onConfirm={handleDeleteCurrentForm}
+                  />
+                ) : null}
+                {isProcessRunning ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -318,7 +476,20 @@ export function FormProcessReviewEditor({
               </div>
             </div>
             <div className="relative h-[78vh] overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100">
-              {isPreviewLoading ? (
+              {isProcessRunning ? (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/92 px-6 text-center backdrop-blur-sm">
+                  <LoaderCircle className="size-8 animate-spin text-zinc-500" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-zinc-700">
+                      This form is still being filled.
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      PDF preview will be available once the process reaches
+                      Ready for review.
+                    </p>
+                  </div>
+                </div>
+              ) : isPreviewLoading ? (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/88 backdrop-blur-sm">
                   <LoaderCircle className="size-8 animate-spin text-zinc-500" />
                   <p className="text-sm text-zinc-600">
@@ -326,22 +497,46 @@ export function FormProcessReviewEditor({
                   </p>
                 </div>
               ) : null}
-              <PdfPreviewViewer
-                key={previewFileUrl}
-                title={`${processForm.name} preview`}
-                src={previewFileUrl}
-                onLoadingStateChange={setIsPreviewLoading}
-                showZoomControls={false}
-              />
+              {isProcessRunning ? null : (
+                <PdfPreviewViewer
+                  key={previewFileUrl}
+                  title={`${processForm.name} preview`}
+                  src={previewFileUrl}
+                  onLoadingStateChange={setIsPreviewLoading}
+                  showZoomControls={false}
+                />
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card className="self-start border-zinc-300/70 bg-white/85 backdrop-blur-sm lg:sticky lg:top-4">
           <CardHeader>
-            <CardTitle>
-              {isFinalized ? "Finalized Payload" : "Payload Fields"}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>
+                {isFinalized ? "Finalized Payload" : "Payload Fields"}
+              </CardTitle>
+              {isEditable ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 px-2.5"
+                  disabled={!hasUnsavedChanges || isSavingPayload}
+                  onClick={() => {
+                    void handleSavePayload();
+                  }}
+                >
+                  {isSavingPayload ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save changes"
+                  )}
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="h-[calc(100vh-16rem)] space-y-3 overflow-y-auto pr-2">
             {fields.length === 0 ? (
@@ -382,22 +577,86 @@ export function FormProcessReviewEditor({
           <DialogHeader>
             <DialogTitle>Process context</DialogTitle>
             <DialogDescription>
-              Reference text used to generate values for this process.
+              Review or revise the context used to generate values for this
+              process.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700">
-              {process.context}
-            </p>
-          </div>
+          {isEditingContext ? (
+            <div className="space-y-3">
+              <Textarea
+                value={draftContext}
+                onChange={(event) => setDraftContext(event.target.value)}
+                className="min-h-48 resize-y"
+                disabled={!canModifyContext || isRerunningProcess}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                <span>{contextWordCount} words</span>
+                {!canModifyContext ? (
+                  <span>
+                    {isFinalized
+                      ? "Finalize must be reverted before changing context."
+                      : "Wait for the current run to finish before changing context."}
+                  </span>
+                ) : !isContextChanged ? (
+                  <span>Change the context before rerunning.</span>
+                ) : contextWordCount < 15 ? (
+                  <span>Context must contain at least 15 words.</span>
+                ) : null}
+              </div>
+              {contextErrorMessage ? (
+                <p className="text-sm text-red-600">{contextErrorMessage}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+                {process.context}
+              </p>
+            </div>
+          )}
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsContextDialogOpen(false)}
+              onClick={() => {
+                if (isEditingContext) {
+                  setIsEditingContext(false);
+                  setDraftContext(process.context);
+                  setContextErrorMessage("");
+                  return;
+                }
+                setIsContextDialogOpen(false);
+              }}
+              disabled={isRerunningProcess}
             >
-              Close
+              {isEditingContext ? "Cancel" : "Close"}
             </Button>
+            {isEditingContext ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  void handleContextRerun();
+                }}
+                disabled={!canSubmitContextRerun}
+              >
+                {isRerunningProcess ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" />
+                    Rerunning...
+                  </>
+                ) : (
+                  "Save and rerun all forms"
+                )}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => setIsEditingContext(true)}
+                disabled={!canModifyContext}
+              >
+                Modify
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -518,6 +777,24 @@ function tokenizePath(path: string): Array<string | number> {
     }
   });
   return tokens;
+}
+
+function normalizeContext(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function countWords(value: string): number {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0).length;
+}
+
+function arePayloadsEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function labelFromPath(path: string): string {

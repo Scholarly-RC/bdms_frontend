@@ -22,6 +22,7 @@ type ConfirmationModalProps = {
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
   isConfirming?: boolean;
+  errorMessage?: string | null;
   onConfirm: () => void | Promise<void>;
 };
 
@@ -33,13 +34,18 @@ export function ConfirmationModal({
   cancelLabel = "Cancel",
   confirmVariant = "default",
   isConfirming = false,
+  errorMessage = null,
   onConfirm,
 }: ConfirmationModalProps) {
   const [open, setOpen] = useState(false);
 
   const handleConfirm = async () => {
-    await onConfirm();
-    setOpen(false);
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch {
+      // Keep the modal open so the caller can surface the error state.
+    }
   };
 
   return (
@@ -50,6 +56,9 @@ export function ConfirmationModal({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {errorMessage ? (
+          <p className="text-sm text-red-600">{errorMessage}</p>
+        ) : null}
         <DialogFooter>
           <Button
             type="button"

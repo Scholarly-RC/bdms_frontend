@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { sortFormsByName } from "@/app/(workspace)/form-processes/_lib/forms";
 import type { FormProcessRead } from "@/app/(workspace)/form-processes/_lib/types";
 import { FormProcessReviewEditor } from "@/app/(workspace)/form-processes/[processId]/_components/form-process-review-editor";
 import { ProcessFormSelector } from "@/app/(workspace)/form-processes/[processId]/_components/process-form-selector";
@@ -42,7 +43,8 @@ async function fetchForms(): Promise<FormRead[]> {
     throw new Error("Unable to load forms.");
   }
 
-  return (await response.json()) as FormRead[];
+  const payload = (await response.json()) as FormRead[];
+  return sortFormsByName(payload);
 }
 
 export default async function FormProcessDetailPage({

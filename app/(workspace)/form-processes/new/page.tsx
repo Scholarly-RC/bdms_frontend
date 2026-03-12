@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CreateFormProcessForm } from "@/app/(workspace)/form-processes/_components/create-form-process-form";
+import { sortFormsByName } from "@/app/(workspace)/form-processes/_lib/forms";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { backendFetchFromSession } from "@/lib/api/server";
@@ -11,11 +12,6 @@ type FormRead = {
   description: string;
 };
 
-const formNameCollator = new Intl.Collator(undefined, {
-  numeric: true,
-  sensitivity: "base",
-});
-
 async function fetchForms(): Promise<FormRead[]> {
   const response = await backendFetchFromSession("/forms", { method: "GET" });
   if (!response.ok) {
@@ -23,9 +19,7 @@ async function fetchForms(): Promise<FormRead[]> {
   }
 
   const payload = (await response.json()) as FormRead[];
-  return payload.sort((left, right) =>
-    formNameCollator.compare(left.name, right.name),
-  );
+  return sortFormsByName(payload);
 }
 
 export default async function NewFormProcessPage() {
